@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Wednesday</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/viewer.css">
+<link rel="stylesheet" href="css/docs.css">
+<link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+<div id="win">
+<div class="title-bar"><h1>Project Wednesday</h1><span class="chip" id="version"></span></div>
+<div id="app">
+  <aside id="panel">
+
+    <section>
+      <h2>Setup <span class="info-btn" tabindex="0" role="button" aria-label="Setup Help" data-tip="<b>Setup &amp; Execution</b><br>Configure orbital parameters using the form fields below or click <b>Reset</b> to load a clean baseline. Click <b>Run simulation</b> to propagate the orbit. Use <b>Save config</b> / <b>Open config</b> to export or import settings as JSON.">?</span></h2>
+      <label class="field">Trial
+        <select id="preset"></select>
+      </label>
+      <div id="form"></div>
+      <div class="row">
+        <button id="run" class="primary">Run simulation</button>
+        <button id="newCfg">Reset</button>
+        <button id="loadCfg">Open config</button>
+        <button id="saveCfg">Save config</button>
+      </div>
+      <div id="progress" hidden><div id="bar"></div></div>
+      <ul id="errors" role="alert" hidden></ul>
+      <ul id="warnings" role="status" hidden></ul>
+      <details id="jsonBox">
+        <summary>Edit config as JSON <span class="info-btn" tabindex="0" role="button" aria-label="JSON Help" data-tip="<b>JSON Configuration</b><br>Directly edit the complete simulation schema. This allows advanced configurations such as epoch-varying SRP coefficient schedules (e.g. <code>&quot;cr&quot;: [[0, 2.0], [86400, 1.4]]</code>), Cartesian velocity vectors, or customized constellation spacing.">?</span></summary>
+        <textarea id="config" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        <dl class="ref">
+          <dt>parent.shape</dt><dd><code>"earth_default"</code> (no other inputs) or <code>"sphere_uniform"</code> with <code>radius_m</code>, <code>density_kg_m3</code> and <code>rotation</code>: <code>spin_period_s</code>, <code>pole_ra_deg</code>, <code>pole_dec_deg</code>, <code>prime_meridian_deg</code>.</dd>
+          <dt>start_epoch</dt><dd><code>"YYYY-MM-DDThh:mm:ss.sss SCALE"</code>, SCALE one of UTC, TAI, TT, TDB, GPS.</dd>
+          <dt>duration <em>or</em> end_epoch</dt><dd>Seconds, or an ISO 8601 duration such as <code>"P1DT6H"</code>. Or an end epoch in the start_epoch format. Not both.</dd>
+          <dt>integrator</dt><dd><code>{"type": "rk4", "time_step_s": 10}</code></dd>
+          <dt>output_step_s</dt><dd>Spacing of rows in plan.csv. Independent of the integration step.</dd>
+          <dt>satellites</dt><dd><code>count</code> (1 to 100), <code>mass_kg</code> (up to 10000), <code>names</code> (list) or <code>name_prefix</code>, and <code>orbits</code>: one entry per satellite.</dd>
+          <dt>orbits[ ]</dt><dd><code>{"type": "keplerian", "a_m", "e", "i_deg", "raan_deg", "argp_deg", "ta_deg"}</code> (osculating, inertial frame) or <code>{"type": "cartesian", "r_m": [x, y, z], "v_m_s": [vx, vy, vz]}</code>.</dd>
+          <dt>earth_orientation.dut1_s</dt><dd>Optional UT1 minus UTC in seconds for Earth. Default 0.</dd>
+          <dt>force_model</dt><dd><code>{"drag": true, "srp": true}</code> turns on atmospheric drag and/or solar radiation pressure for Earth (<code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>). Needs <code>satellites.area_m2</code>; <code>satellites.cd</code> defaults to 2.2, <code>satellites.cr</code> defaults to 1.8. Each orbit entry may override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>.</dd>
+          <dt>satellites.pattern</dt><dd>Use in place of <code>orbits</code>. <code>{"type": "walker", "a_m", "i_deg", "t", "p", "f"}</code> or <code>{"type": "train", "base": {Keplerian orbit}, "offset": {"along_track_m" | "ta_deg" | "raan_deg"}}</code> with <code>count</code>.</dd>
+          <dt>orbits[ ] from a TLE</dt><dd><code>{"type": "tle", "line1": "1 ...", "line2": "2 ..."}</code>. Approximate.</dd>
+          <dt>maneuvers[ ]</dt><dd><code>{"sat": name, "t_s" or "epoch", "dv_m_s": [a, b, c], "frame": "lvlh" | "inertial"}</code>. For lvlh the three numbers are radial, along-track, cross-track.</dd>
+        </dl>
+      </details>
+    </section>
+
+    <section>
+      <h2>Run report <span class="info-btn" tabindex="0" role="button" aria-label="Report Help" data-tip="<b>Run Report &amp; Ephemeris</b><br>Inspect post-run validation metrics. <b>Energy drift</b> reports relative numerical conservation (&lt;1e-8 displayed in green). Shows orbital period, perigee/apogee altitudes, LTAN nodal drift rate, and re-entry/impact timestamps. Click <b>Download plan.csv</b> to export the full ephemeris dataset.">?</span></h2>
+      <p id="summary" class="muted">No run yet.</p>
+      <div class="tablewrap"><table id="report" hidden><thead><tr></tr></thead><tbody></tbody></table></div>
+      <div class="row">
+        <button id="saveCsv" disabled>Download plan.csv</button>
+        <button id="loadCsv">Open plan.csv</button>
+      </div>
+      <dl id="meta" class="ref"></dl>
+    </section>
+    <input type="file" id="fileCfg" accept=".json,application/json" hidden>
+    <input type="file" id="fileCsv" accept=".csv,text/csv" hidden>
+  </aside>
+
+  <div id="right">
+  <div class="tabs" role="tablist" aria-label="View">
+    <button role="tab" data-v="globe" aria-selected="true">3D globe</button><button role="tab" data-v="map" aria-selected="false">Mercator map</button><button role="tab" data-v="ltan" aria-selected="false">LTAN drift</button><button role="tab" data-v="alt" aria-selected="false">Altitude drift</button><button role="tab" data-v="beta" aria-selected="false">Beta angle</button><button role="tab" data-v="ecl" aria-selected="false">Eclipse</button><button role="tab" data-v="range" aria-selected="false">Range</button><button role="tab" data-v="docs" aria-selected="false">Documentation</button>
+  </div>
+  <main id="stage">
+    <canvas id="gl" aria-label="3D view of the parent body and satellites"></canvas>
+    <canvas id="map" hidden aria-label="Mercator map of satellite ground tracks"></canvas>
+    <canvas id="ltan" hidden aria-label="Chart of LTAN or altitude over the run"></canvas>
+    <div id="docs" hidden class="doc-container"></div>
+    <div id="labels"></div>
+    <div id="notice" hidden></div>
+    <div id="hud">
+      <div id="epoch">&nbsp;</div>
+      <div id="elapsed" class="muted">&nbsp;</div>
+      <div id="frame" class="muted"></div>
+    </div>
+    <div id="side">
+      <div class="window"><div class="title-bar">Satellites</div><div id="legend"></div></div>
+      <div class="window"><div class="title-bar">Telemetry</div><div id="telemetry" hidden></div></div>
+    </div>
+    <div id="transport">
+      <button id="play" aria-label="Play or pause">Play</button>
+      <input id="scrub" type="range" min="0" max="0" step="1" value="0" aria-label="Time">
+      <label>Speed <select id="speed"></select></label>
+      <label>Trail <select id="trail"><option value="orbit">1 orbit</option><option value="6h">6 h</option><option value="24h">24 h</option><option value="all">Whole run</option></select></label>
+      <label class="tog"><input type="checkbox" id="tPaths" checked> Paths</label>
+      <label class="tog"><input type="checkbox" id="tLabels" checked> Labels</label>
+      <label class="tog"><input type="checkbox" id="tAxes" checked> Axes</label>
+      <button id="resetView">Reset view</button>
+      <button id="saveChart" hidden>Save CSV</button>
+    </div>
+  </main>
+  </div>
+</div>
+</div>
+
+<!-- Leap-second table (SIM_060). Data, not code: edit here, or set window.ORBITAL_SIM_LEAP_SECONDS_URL to a JSON file of the same shape. -->
+<script type="application/json" id="leap-seconds">{"name": "leap_seconds", "source": "IERS Bulletin C (same content as NAIF naif0012.tls)", "version": "2017-01-01", "entries": [["1972-01-01", 10], ["1972-07-01", 11], ["1973-01-01", 12], ["1974-01-01", 13], ["1975-01-01", 14], ["1976-01-01", 15], ["1977-01-01", 16], ["1978-01-01", 17], ["1979-01-01", 18], ["1980-01-01", 19], ["1981-07-01", 20], ["1982-07-01", 21], ["1983-07-01", 22], ["1985-07-01", 23], ["1988-01-01", 24], ["1990-01-01", 25], ["1991-01-01", 26], ["1992-07-01", 27], ["1993-07-01", 28], ["1994-07-01", 29], ["1996-01-01", 30], ["1997-07-01", 31], ["1999-01-01", 32], ["2006-01-01", 33], ["2009-01-01", 34], ["2012-07-01", 35], ["2015-07-01", 36], ["2017-01-01", 37]]}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+/* Windows 98 controls: buttons, fields, group boxes, list views, tooltips. */
+/* Windows 98 Info / What's This? icon */
+.info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  background: var(--face);
+  box-shadow: inset -1px -1px var(--dk), inset 1px 1px var(--hi), inset -2px -2px var(--sh), inset 2px 2px var(--lt);
+  color: #000080;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  user-select: none;
+}
+.info-btn:active {
+  box-shadow: inset 1px 1px var(--dk), inset -1px -1px var(--hi);
+  padding: 1px 0 0 1px;
+}
+.info-btn:focus-visible {
+  outline: 1px dotted #000;
+}
+
+/* Global unclipped Win98 tooltip placed directly in body */
+#win98-infotip {
+  position: fixed;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  background: #ffffe1; /* classic Win98 infotip yellow */
+  color: #000;
+  border: 1px solid #000;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+  padding: 6px 9px;
+  font: normal 11px/1.4 var(--sans);
+  text-align: left;
+  white-space: normal;
+  z-index: 999999;
+  pointer-events: none;
+}
+#win98-infotip code {
+  background: rgba(0,0,0,0.06);
+  padding: 1px 3px;
+  border: 1px solid rgba(0,0,0,0.15);
+  font: 10px var(--mono);
+}
+#win98-infotip b {
+  color: #000080;
+}
+
+/* group boxes */
+section { position: relative; border: 1px solid var(--sh); box-shadow: inset 1px 1px var(--hi), 1px 1px var(--hi); padding: 14px 10px 10px; margin-top: 14px; }
+h2 { position: absolute; top: -8px; left: 8px; margin: 0; padding: 0 4px; background: var(--face); font-size: 12px; font-weight: normal; }
+.muted { color: #000; }
+.field { display: block; margin-bottom: 8px; }
+
+/* controls */
+select, button, textarea, input { font: inherit; color: inherit; }
+button { background: var(--face); border: 0; box-shadow: var(--raised); min-height: 23px; padding: 4px 12px; cursor: default; }
+button:active:not(:disabled) { box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--dk), inset -2px -2px var(--lt), inset 2px 2px var(--sh); padding: 5px 11px 3px 13px; }
+button:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+button:disabled { color: var(--sh); text-shadow: 1px 1px var(--hi); }
+button.primary { box-shadow: inset -2px -2px var(--dk), inset 1px 1px var(--dk), inset 2px 2px var(--hi), inset -3px -3px var(--sh), inset 3px 3px var(--lt); }
+select { appearance: none; -webkit-appearance: none; border: 0; box-shadow: var(--sunken); padding: 3px 22px 3px 4px; max-width: 100%; height: 21px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='17'%3E%3Crect width='16' height='17' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v15H0z' fill='%23dfdfdf'/%3E%3Cpath d='M1 1h13v1H2v13H1z' fill='%23fff'/%3E%3Cpath d='M15 0h1v17H0v-1h15z' fill='%230a0a0a'/%3E%3Cpath d='M14 1h1v15H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7L7.5 10z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center; }
+select:focus { outline: 1px dotted #000; outline-offset: -4px; }
+.field select { display: block; width: 100%; margin-top: 3px; }
+textarea { width: 100%; height: 300px; resize: vertical; background: #fff; color: #000; border: 0; box-shadow: var(--sunken); padding: 5px;
+  font: 12px/1.45 var(--mono); tab-size: 2; white-space: pre; overflow: auto; outline: 0; }
+input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; margin: 0; background: #fff; box-shadow: var(--sunken); flex: none; }
+input[type=checkbox]:checked { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='7'%3E%3Cpath d='M7 0H6v1H5v1H4v1H3v1H2V3H1V2H0v3h1v1h1v1h1V6h1V5h1V4h1V3h1z' fill='%23000'/%3E%3C/svg%3E") no-repeat center; }
+input[type=checkbox]:focus-visible + *, input[type=checkbox]:focus-visible { outline: 1px dotted #000; }
+input[type=checkbox]:disabled { background-color: var(--face); }
+input[type=range] { appearance: none; -webkit-appearance: none; background: transparent; height: 23px; margin: 0; }
+input[type=range]:focus { outline: 1px dotted #000; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; background: var(--face); box-shadow: inset 1px 1px var(--sh), inset -1px -1px var(--hi), inset 2px 2px var(--dk); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 21px; margin-top: -9px; background: var(--face); box-shadow: var(--raised); }
+input[type=range]::-moz-range-track { height: 4px; background: var(--face); box-shadow: inset 1px 1px var(--sh), inset -1px -1px var(--hi), inset 2px 2px var(--dk); }
+input[type=range]::-moz-range-thumb { width: 11px; height: 21px; border: 0; border-radius: 0; background: var(--face); box-shadow: var(--raised); }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#progress { height: 18px; background: var(--face); box-shadow: var(--sunken); padding: 3px; margin-top: 8px; }
+#bar { height: 100%; width: 0; background: repeating-linear-gradient(90deg, var(--navy) 0 10px, transparent 10px 12px); }
+#errors { margin: 8px 0 0; padding: 6px 6px 6px 22px; background: #fff; box-shadow: var(--sunken); color: var(--bad); overflow-wrap: anywhere; }
+#warnings { margin: 8px 0 0; padding: 6px 6px 6px 22px; background: #fffbe6; border: 1px solid #d4b106; box-shadow: var(--sunken); color: #7a5e00; overflow-wrap: anywhere; }
+details { margin-top: 10px; }
+summary { cursor: default; color: #0000ff; text-decoration: underline; }
+.ref { margin: 6px 0 0; }
+.ref dt { margin-top: 8px; font-weight: bold; overflow-wrap: anywhere; }
+.ref dd { margin: 1px 0 0; overflow-wrap: anywhere; }
+code { font: 12px var(--mono); }
+
+/* list view */
+.tablewrap { overflow: auto; max-height: 260px; background: #fff; box-shadow: var(--sunken); padding: 2px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 2px 8px 2px 5px; white-space: nowrap; }
+th { font-weight: normal; position: sticky; top: 0; background: var(--face); box-shadow: var(--raised); padding: 3px 8px 3px 6px; }
+td:last-child { white-space: normal; min-width: 96px; }
+.ok { color: var(--good); } .warn { color: var(--bad); }
+.dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border: 1px solid #000; }

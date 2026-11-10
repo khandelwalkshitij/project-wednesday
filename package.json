@@ -1,0 +1,22 @@
+{
+  "name": "project-wednesday",
+  "version": "0.3.0",
+  "description": "Browser orbital simulator: RK4 propagation with J2-J4, drag, SRP, burns, TLE import, 3D globe, Mercator ground tracks and drift charts.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "node scripts/serve.mjs",
+    "lint": "eslint src scripts tests",
+    "test": "npm run test:core && npm run build && npm run test:browser",
+    "test:core": "node tests/core/run-all.mjs",
+    "test:browser": "node tests/browser/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "three": "0.128.0",
+    "playwright": "1.63.0"
+  }
+}

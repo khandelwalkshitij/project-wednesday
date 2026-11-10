@@ -1,0 +1,15 @@
+/* Narrow screens. Loaded last so it can override the rest. */
+@media (max-width: 860px) {
+  body { padding: 2px; }
+  #win { height: auto; }
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  #right { order: -1; }
+  #right #stage { height: 62vh; flex: none; }
+  #panel { overflow: visible; }
+  #side { width: 172px; top: 58px; bottom: 100px; }
+  #legend { max-height: 60px; }
+  #telemetry { font-size: 11px; padding: 3px 5px; line-height: 1.35; }
+  #telemetry div span { white-space: nowrap; }
+  #epoch { font-size: 12px; } #frame { display: none; }
+  textarea { height: 240px; }
+}
