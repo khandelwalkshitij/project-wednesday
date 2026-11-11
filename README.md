@@ -36,6 +36,7 @@ scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
 src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
 tests/core/              Node tests for the physics (ERFA, SGP4, SciPy DOP853 and independent-integrator checks)
+tools/bench_orekit.py    benchmark against Orekit (Java, via orekit-jpype); results in docs/benchmark-orekit.md
 tools/gen_space_weather.py  rebuilds the space-weather table from a CelesTrak SW-All.txt (download a fresh one to update it)
 tools/gen_nrlmsise00.py  regenerates the NRLMSISE-00 coefficients and their pymsis test truth
 tools/gen_moon98.py      regenerates the Moon series from ERFA moon98.c and its pyerfa test truth
