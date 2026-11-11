@@ -8,7 +8,7 @@ export function init() {
   if (docDiv) docDiv.innerHTML = `
       <h1>Project Wednesday Documentation</h1>
 
-      <p>Project Wednesday is a simple orbital simulator that can model satellite orbits. My good friend and colleague, Gowtham prefers to treat his Wednesdays as a no meetings day. On this day, he also prefers to work from home which leads to a significant dip in my quality of life because I like bothering him with requests for random orbital simulations. Project Wednesday fills this hole in my heart. I hope it can do the same for you. Enjoy.
+      <p>Project Wednesday is a simple orbital simulator that can model satellite orbits. Enjoy.
 
       
       <h2>1. Coordinate Systems & Time Scales</h2>
