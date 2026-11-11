@@ -295,7 +295,7 @@ export function tleDialog() {
   }, 'primary');
   var dlg = mk('div', { id: 'dlg' }, [mk('div', { cls: 'window' }, [mk('div', { cls: 'title-bar', text: 'Import TLE' }), mk('div', { cls: 'dbody' }, [ta,
     mk('label', { cls: 'ff inl' }, [cbE, mk('span', { text: 'Set the start epoch to the TLE epoch' })]), mk('label', { cls: 'ff inl' }, [cbR, mk('span', { text: 'Replace the current satellites' })]),
-    mk('p', { cls: 'muted', text: 'Approximate: TLEs hold averaged elements. Expect errors of about 10 to 20 km in low orbit, more for very eccentric orbits.' }), err, row([ok, btn('Cancel', close)])])])]);
+    mk('p', { cls: 'muted', text: 'The TLE is propagated to start_epoch with SGP4 (SDP4 for periods of 225 minutes or more). From there the simulator uses its own force model, so it drifts from SGP4 over time.' }), err, row([ok, btn('Cancel', close)])])])]);
   document.body.appendChild(dlg); ta.focus();
 }
 

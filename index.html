@@ -45,7 +45,7 @@
           <dt>earth_orientation.dut1_s</dt><dd>Optional UT1 minus UTC in seconds for Earth. Default 0.</dd>
           <dt>force_model</dt><dd><code>{"drag": true, "srp": true}</code> turns on atmospheric drag and/or solar radiation pressure for Earth (<code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>). Needs <code>satellites.area_m2</code>; <code>satellites.cd</code> defaults to 2.2, <code>satellites.cr</code> defaults to 1.8. Each orbit entry may override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>.</dd>
           <dt>satellites.pattern</dt><dd>Use in place of <code>orbits</code>. <code>{"type": "walker", "a_m", "i_deg", "t", "p", "f"}</code> or <code>{"type": "train", "base": {Keplerian orbit}, "offset": {"along_track_m" | "ta_deg" | "raan_deg"}}</code> with <code>count</code>.</dd>
-          <dt>orbits[ ] from a TLE</dt><dd><code>{"type": "tle", "line1": "1 ...", "line2": "2 ..."}</code>. Approximate.</dd>
+          <dt>orbits[ ] from a TLE</dt><dd><code>{"type": "tle", "line1": "1 ...", "line2": "2 ..."}</code>. SGP4 gives the state at start_epoch; the simulator's own force model takes it from there.</dd>
           <dt>maneuvers[ ]</dt><dd><code>{"sat": name, "t_s" or "epoch", "dv_m_s": [a, b, c], "frame": "lvlh" | "inertial"}</code>. For lvlh the three numbers are radial, along-track, cross-track.</dd>
         </dl>
       </details>

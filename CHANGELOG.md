@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- TLE orbits use real SGP4/SDP4 for the state at start_epoch, ported from satellite.js 6.0.2 (MIT) into `src/vendor/sgp4.js`, with no runtime dependency. Matches SGP4 with ERFA to under 1 m, where the old J2 approximation was 8 to 56 km out. Tests include Vallado's verification vectors.
+
 ## 0.3.0
 
 - Solar radiation pressure (cannonball model) with Earth shadow. Cr as a constant or a schedule. `force_model.srp`, with `solar_drag` accepted as another name.

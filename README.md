@@ -13,7 +13,7 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Drag:** exponential atmosphere (Vallado's table), co-rotating air, re-entry declared at 80 km. No solar activity.
 - **Solar radiation pressure:** cannonball model, 4.56e-6 N/m² at 1 AU scaled by 1/r², switched off in a cylindrical Earth shadow. Cr can be a constant or a time schedule.
 - **Burns:** impulsive, in LVLH (radial, along-track, cross-track) or inertial axes, applied at the exact commanded time.
-- **Inputs:** Keplerian or Cartesian states, TLEs (approximate: mean elements treated as osculating), Walker and train patterns.
+- **Inputs:** Keplerian or Cartesian states, TLEs (initial state from SGP4/SDP4, then propagated with this force model), Walker and train patterns.
 - **Checks:** energy residual after removing drag work, SRP work and burn energy, so the report shows pure numerical error. Jacobi integral for a uniform sphere.
 - **Outputs:** `plan.csv` ephemeris, LTAN, altitude, beta angle, eclipse and inter-satellite range charts, each exportable as CSV.
 
@@ -33,6 +33,7 @@ src/app/                 page logic: boot, presets, form, run, report, infotip, 
 src/viewer/              three.js globe, Mercator map, charts, docs tab, playback loop
 scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
+src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
 tests/core/              Node tests for the physics (ERFA, SGP4 and independent-integrator checks)
 tests/browser/           Playwright smoke test of both builds
 tools/gen_tables.py      regenerates the ERFA-derived tables and test truth
@@ -92,4 +93,4 @@ npm install
 
 ## Licence
 
-MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). Nutation and TDB coefficients from ERFA (BSD-style licence, derived from IAU SOFA).
+MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). SGP4/SDP4 from satellite.js 6.0.2 (MIT, see `src/vendor/sgp4.js`). Nutation and TDB coefficients from ERFA (BSD-style licence, derived from IAU SOFA).

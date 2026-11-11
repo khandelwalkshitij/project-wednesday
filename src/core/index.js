@@ -15,11 +15,12 @@ import { run, simulate } from './propagator.js';
 import { betaAngle, eclipseEvents, inShadow, sunDirection } from './sun.js';
 import { formatUtc, leap, parseDuration, parseEpoch, setLeapSeconds, tdbMinusTt } from './time.js';
 import { parseTle, tleState } from './tle.js';
+import { sgp4 } from '../vendor/sgp4.js';
 
 export var SimCore = { VERSION: VERSION, G: G, EARTH: EARTH, LIMITS: LIMITS, ConfigError: ConfigError, setLeapSeconds: setLeapSeconds, parseEpoch: parseEpoch, parseDuration: parseDuration, formatUtc: formatUtc,
   tdbMinusTt: tdbMinusTt, earthRotation: earthRotation, earthPole: earthPole, bodyMatrix: bodyMatrix, poleRaDec: poleRaDec, primeMeridianAngle: primeMeridianAngle,
   kepToState: kepToState, stateToKep: stateToKep, geodetic: geodetic, atmosphereDensity: atmosphereDensity, magneticField: magneticField, makeParent: makeParent,
   normalizeConfig: normalizeConfig, simulate: simulate, run: run, parsePlanCsv: parsePlanCsv, mvec: mvec, mTvec: mTvec, hermite: hermite, crc32: crc32,
-  sunDirection: sunDirection, inShadow: inShadow, betaAngle: betaAngle, interpState: interpState, eclipseEvents: eclipseEvents, expandPattern: expandPattern, parseTle: parseTle, tleState: tleState, getCr: getCr, parseCr: parseCr,
+  sunDirection: sunDirection, inShadow: inShadow, betaAngle: betaAngle, interpState: interpState, eclipseEvents: eclipseEvents, expandPattern: expandPattern, parseTle: parseTle, tleState: tleState, sgp4: sgp4, getCr: getCr, parseCr: parseCr,
   ltanFromMatrix: ltanFromMatrix, ltanHours: ltanHours, unwrapHours: unwrapHours, fitLine: fitLine, fmtHms: fmtHms,
   leapInfo: function () { return leap; } };
