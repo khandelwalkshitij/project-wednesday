@@ -194,53 +194,33 @@ button.mini { min-height: 19px; padding: 0 6px; }
 ::-webkit-scrollbar-thumb { background: var(--face); box-shadow: var(--raised); }
 ::-webkit-scrollbar-corner { background: var(--face); }
 
-/* Documentation tab. */
-/* Documentation Tab */
+/* Documentation tab: plain HTML look, close to browser defaults. */
 .doc-container {
   position: absolute;
   inset: 0;
   overflow-y: auto;
+  z-index: 15;
   background: #fff;
   color: #000;
-  padding: 20px 32px;
-  font: 14px/1.6 var(--sans);
-  z-index: 15;
+  padding: 8px 16px;
+  font: 16px/1.4 "Times New Roman", Times, serif;
 }
-.doc-container h1, .doc-container h2, .doc-container h3 {
-  color: #000080;
-  margin: 1.2em 0 0.5em;
-  font-weight: bold;
-}
-.doc-container h1 { font-size: 24px; border-bottom: 2px solid #000080; padding-bottom: 4px; }
-.doc-container h2 { position: static; background: transparent; font-weight: bold; font-size: 18px; border-bottom: 1px solid #c0c0c0; padding-bottom: 4px; }
-.doc-container h3 { font-size: 15px; }
-.doc-container p, .doc-container ul, .doc-container ol { margin: 0 0 1em; }
-.doc-container li { margin-bottom: 0.4em; }
-.doc-container code {
-  background: rgba(0,0,0,0.06);
-  padding: 2px 4px;
-  border: 1px solid rgba(0,0,0,0.15);
-  font: 13px var(--mono);
-}
-.doc-container pre {
-  background: #f0f0f0;
-  padding: 12px;
-  border: 1px solid var(--sh);
-  box-shadow: var(--sunken);
-  overflow-x: auto;
-  font: 13px/1.4 var(--mono);
-}
-.doc-container a { color: #0000ff; text-decoration: none; }
-.doc-container a:hover { text-decoration: underline; }
-.doc-container table.doc-table { border-collapse: collapse; margin-bottom: 1em; width: 100%; max-width: 800px; }
-.doc-container table.doc-table th, .doc-container table.doc-table td { border: 1px solid var(--sh); padding: 6px 10px; text-align: left; }
-.doc-container table.doc-table th { background: #dfdfdf; font-weight: bold; }
-.math { font-family: "Times New Roman", Times, serif; font-style: italic; white-space: nowrap; }
-.doc-container .doc-toc { padding: 6px 0 10px; border-bottom: 1px solid var(--sh); margin-bottom: 8px; }
-.doc-container .doc-toc a { margin: 0 4px; }
-.doc-container .doc-page { padding-bottom: 16px; border-bottom: 1px solid var(--sh); margin-bottom: 16px; }
-.doc-container .doc-tablewrap { overflow-x: auto; max-width: 100%; }
+.doc-container h1 { font-size: 2em; margin: 0.67em 0; }
+.doc-container h2 { position: static; background: none; font-size: 1.5em; margin: 0.83em 0; }
+.doc-container h3 { font-size: 1.17em; margin: 1em 0; }
+.doc-container h1, .doc-container h2, .doc-container h3 { color: #000; font-weight: bold; border: 0; padding: 0; }
+.doc-container p, .doc-container ul, .doc-container pre { margin: 1em 0; }
+.doc-container code, .doc-container pre { font: 0.9em monospace; background: none; border: 0; padding: 0; box-shadow: none; }
 .doc-container pre { overflow-x: auto; }
+.doc-container a { color: #0000ee; text-decoration: underline; }
+.doc-container a:visited { color: #551a8b; }
+.doc-container hr { border: 0; border-top: 1px solid #888; margin: 1.5em 0; }
+.doc-container section { border: 0; box-shadow: none; padding: 0; margin: 0; }
+.doc-container table { border-collapse: collapse; width: auto; }
+.doc-container th, .doc-container td { border: 1px solid #000; padding: 2px 6px; text-align: left; vertical-align: top; background: none; white-space: normal; min-width: 0; }
+.doc-container th { position: static; box-shadow: none; font-weight: bold; }
+.doc-container .doc-tablewrap { overflow-x: auto; max-width: 100%; }
+.math { font-family: "Times New Roman", Times, serif; font-style: italic; white-space: nowrap; }
 a.doclink { font-size: 0.92em; }
 
 /* Narrow screens. Loaded last so it can override the rest. */
@@ -6339,8 +6319,9 @@ a.doclink { font-size: 0.92em; }
   }
 
   // src/viewer/docs-content.js
-  var DOC_HTML = `<nav class="doc-toc"><b>Pages:</b> <a href="#models" data-doc>Overview and models</a> \xB7 <a href="#config-reference" data-doc>Config reference</a> \xB7 <a href="#accuracy" data-doc>Accuracy and limits</a> \xB7 <a href="#glossary" data-doc>Glossary</a></nav>
-<section class="doc-page">
+  var DOC_HTML = `<p>Pages: <a href="#models" data-doc>Overview and models</a> | <a href="#config-reference" data-doc>Config reference</a> | <a href="#accuracy" data-doc>Accuracy and limits</a> | <a href="#glossary" data-doc>Glossary</a></p>
+<hr>
+<section>
 <h2 id="models">Project Wednesday</h2>
 <p>Project Wednesday is a simple orbital simulator that can model satellite orbits. Enjoy.</p>
 <p>This page describes what the simulator models. The other pages are the <a href="#config-reference" data-doc>config reference</a> (every config field and every <code>plan.csv</code> line), <a href="#accuracy" data-doc>accuracy and limits</a> (how good the results are and how to choose a step size) and the <a href="#glossary" data-doc>glossary</a>.</p>
@@ -6376,7 +6357,8 @@ a.doclink { font-size: 0.92em; }
 <p><b>Project Wednesday</b> is open-source software released under the <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT License</a>. The software is provided "as is", without warranty of any kind.</p>
 <ul><li><b>Standards:</b> IAU 2006/2000B precession-nutation, the IERS Bulletin C leap-second table, WGS84 and EGM96 zonal coefficients.</li><li><b>SGP4/SDP4:</b> from <a href="https://github.com/shashwatak/satellite-js" target="_blank" rel="noopener">satellite.js</a> 6.0.2 (MIT), a port of Vallado's reference code.</li><li><b>Atmosphere and space weather:</b> NRLMSISE-00 (Picone, Hedin, Drob and Aikin 2002), ported from the public-domain C version by Dominik Brodowski. A U.S. Government work not subject to copyright; no endorsement by the Naval Research Laboratory is implied. Space weather from <a href="https://celestrak.org/SpaceData/" target="_blank" rel="noopener">CelesTrak</a>.</li><li><b>Moon ephemeris, nutation and TDB series:</b> coefficients from <a href="https://github.com/liberfa/erfa" target="_blank" rel="noopener">ERFA</a> (BSD-style licence, derived from IAU SOFA).</li><li><b>Map:</b> continental outlines from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain).</li><li><b>Graphics:</b> <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT).</li></ul>
 </section>
-<section class="doc-page">
+<hr>
+<section>
 <h2 id="config-reference">Config reference</h2>
 <p>A run is described by one JSON config. The JSON box in the app ("Edit config as JSON") is the source of truth, and the setup form edits it. The same config is written into every <code>plan.csv</code>, so a run can be repeated exactly. Every example on this page is a complete config: paste it into the JSON box and press Run. The test suite runs each one.</p>
 <p>Before a run, the whole config is checked and every problem is listed by field name. Warnings (a coarse step, predicted space weather and so on) are listed too, but do not stop the run.</p>
@@ -6613,7 +6595,8 @@ a.doclink { font-size: 0.92em; }
 <div class="doc-tablewrap"><table class="doc-table"><tr><th>Key</th><th>Meaning</th></tr><tr><td><code>energy_rel_drift</code></td><td>Largest relative change in orbital energy over the run, after removing the work of drag, SRP and Sun and Moon gravity and the energy of burns: numerical error alone.</td></tr><tr><td><code>jacobi_rel_drift</code></td><td>The same for the Jacobi integral (sphere parents).</td></tr><tr><td><code>period_s</code>, <code>perigee_alt_m</code>, <code>apogee_alt_m</code></td><td>Of the osculating orbit at the start epoch; altitudes above the equatorial radius.</td></tr><tr><td><code>drag_work_j_per_kg</code></td><td>Work done by drag, when drag is the only extra force.</td></tr><tr><td><code>nongrav_work_j_per_kg</code></td><td>Work done by drag and SRP, when SRP is on (without Sun and Moon gravity).</td></tr><tr><td><code>perturbation_work_j_per_kg</code></td><td>Work done by all extra forces, when Sun and Moon gravity is on.</td></tr><tr><td><code>burns</code>, <code>dv_total_m_s</code></td><td>Number of burns and their total delta-v.</td></tr><tr><td><code>ltan_start</code>, <code>ltan_end</code>, <code>ltan_drift_min_per_day</code></td><td>LTAN at the start and end, and its drift rate (Earth).</td></tr></table></div>
 <p>Impact lines have <code>sat</code>, <code>kind</code> (<code>reentry</code> with drag, <code>impact</code> without), <code>epoch_utc</code>, <code>t_s</code>, <code>body_fixed_m</code> (x y z), <code>lat_deg</code> and <code>lon_deg</code>.</p>
 </section>
-<section class="doc-page">
+<hr>
+<section>
 <h2 id="accuracy">Accuracy and limits</h2>
 <p>How far the results can be trusted, and how to choose an integration step. The numbers come from the test suite (<code>npm test</code>) and from two comparisons with Orekit, an independent flight-dynamics library: <a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/docs/benchmark-orekit.md" target="_blank" rel="noopener">each model in isolation</a>, and <a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/README.md#validation-against-orekit" target="_blank" rel="noopener">every example config in the app</a>.</p>
 <p>Two kinds of error matter. <b>Numerical error</b> is how far the integrator is from the exact solution of the simulator's own equations; the step setting controls it, and the table below shows how much. <b>Model error</b> is how far those equations are from the real world: an exponential atmosphere instead of the real one, no tesseral gravity and so on. For anything below 1,000 km, model error is usually far larger, especially drag.</p>
@@ -6627,7 +6610,8 @@ a.doclink { font-size: 0.92em; }
 <h3 id="accuracy--limits">Limits</h3>
 <ul><li><b>Gravity:</b> zonal terms J2 to J4 only. Tesseral harmonics are left out; in LEO they cause metres to tens of metres of difference over a day.</li><li><b>Atmosphere:</b> the exponential table has no solar activity, so drag can be off by a factor of several. NRLMSISE-00 follows solar activity, but empirical models typically have 10 to 20% density errors, more in storms. The bundled space-weather table is measured to 20 July 2025; after that it uses CelesTrak's predictions (Ap = 15 where none is predicted), and the run warns.</li><li><b>Sun and Moon positions:</b> analytic, not JPL DE440. The Moon is good to about 6 km and the Sun to about 30 arcseconds (10,000 km). That is plenty for their gravity and for SRP, but not where precise Sun or Moon positions themselves matter.</li><li><b>Shadow:</b> a cylinder with no penumbra, so eclipse entry and exit times are off by up to several seconds.</li><li><b>Earth orientation:</b> no polar motion (about 10 m at the surface), and UT1 is UTC plus a fixed <code>dut1_s</code>. UT1 - UTC is always within 0.9 s, which is up to about 400 m of ground position at the equator if left at 0. Inertial positions, and the orbit itself, are hardly affected; ground tracks and longitudes are.</li><li><b>TLEs:</b> SGP4 sets the starting state; the simulator's own forces carry it from there, so the trajectory drifts from what SGP4 would predict. Measured after one day: 0.25 to 12 km for LEO TLEs, about 170 km for a Molniya TLE (SDP4 includes lunisolar and resonance terms that a short run here does not reproduce from a single state). TLEs themselves are typically good to about a kilometre at their epoch.</li><li><b>Re-entry:</b> a satellite is stopped at 80 km. Below that neither the models nor a point mass are meaningful.</li><li><b>Burns</b> are instantaneous. Long burns lose a little efficiency in reality that is not modelled.</li><li><b>Not modelled:</b> attitude, solar panels or any shape beyond a single area, gravity between satellites, mesh-shaped bodies, relativity, Earth tides.</li><li><b>Size:</b> up to 100 satellites and 1,500,000 output rows per run.</li></ul>
 </section>
-<section class="doc-page">
+<hr>
+<section>
 <h2 id="glossary">Glossary</h2>
 <p>Plain-language explanations of the terms used in the app and these pages. Most come from the requirement sheets in <code>docs/</code>.</p>
 <div class="doc-tablewrap"><table class="doc-table"><tr><th>Term</th><th>Meaning</th></tr><tr><td>Along-track</td><td>The direction of travel along the orbit.</td></tr><tr><td>Ap</td><td>Geomagnetic activity index for a day; ap is the same for a 3-hour slot. Higher means a more disturbed, hotter upper atmosphere and more drag.</td></tr><tr><td>Apogee, perigee</td><td>The highest and lowest points of an orbit. Altitudes here are above the equatorial radius.</td></tr><tr><td>Argument of periapsis</td><td>Where in its orbit the satellite is lowest, measured from the ascending node.</td></tr><tr><td>atol, rtol</td><td>The error the adaptive integrator allows per step: absolute (metres or m/s) and relative (a fraction of the value).</td></tr><tr><td>Beta angle</td><td>The angle between the Sun and the orbit plane. It sets eclipse length and thermal and power loads.</td></tr><tr><td>Body-fixed</td><td>Coordinates that rotate with the parent body, like latitude and longitude on Earth.</td></tr><tr><td>Burn, delta-v (\u0394v)</td><td>A change in velocity from a thruster. Impulsive means treated as instant, a good approximation for short burns.</td></tr><tr><td>Cd</td><td>Drag coefficient, about 2.2 for satellites.</td></tr><tr><td>CelesTrak</td><td>A public source of orbital and space-weather data. The bundled space-weather table comes from its SW-All file.</td></tr><tr><td>Cr</td><td>Reflectivity coefficient for solar radiation pressure: 1 absorbs all light, 2 is a mirror.</td></tr><tr><td>Cross-track</td><td>Sideways, out of the orbit plane.</td></tr><tr><td>Cylindrical shadow</td><td>Earth's shadow treated as a straight tube, fully on or off. The real shadow is a cone with a partial-shadow edge (penumbra) lasting a few seconds at entry and exit.</td></tr><tr><td>Dense output</td><td>A smooth curve an integrator provides between its steps, so output rows can fall anywhere without extra steps.</td></tr><tr><td>Differential drag</td><td>Two satellites feeling different drag, so they slowly drift apart. Also usable on purpose to steer formations without fuel.</td></tr><tr><td>DOP853</td><td>A high-accuracy integrator (Dormand-Prince 8th order) that picks its own step size.</td></tr><tr><td>Drag</td><td>Air resistance from the thin upper atmosphere.</td></tr><tr><td>Eccentricity (e)</td><td>How stretched an orbit is: 0 is a circle, close to 1 is a long thin ellipse.</td></tr><tr><td>Eclipse</td><td>Time spent in Earth's shadow. It sets battery depth of discharge.</td></tr><tr><td>Energy drift</td><td>With gravity only, orbital energy should stay exactly constant, so any drift is numerical error: the best overall health check. When drag, SRP or burns change the energy, their work is subtracted first.</td></tr><tr><td>Ephemeris</td><td>A table or formula giving where solar-system bodies are over time. DE440 is JPL's current standard; this simulator uses analytic formulas instead.</td></tr><tr><td>Epoch</td><td>A specific instant in time.</td></tr><tr><td>ERFA</td><td>The open-source standard library for Earth orientation and time scales, derived from the IAU's SOFA.</td></tr><tr><td>F10.7</td><td>Solar radio flux at 10.7 cm, a proxy for how much the Sun heats the upper atmosphere. Drag swings by a factor of 10 over the solar cycle with it.</td></tr><tr><td>Force model</td><td>The list of forces acting on the satellite.</td></tr><tr><td>Geodetic</td><td>Latitude, longitude and altitude measured on the WGS84 ellipsoid, the same as GPS coordinates.</td></tr><tr><td>GCRF, ICRF</td><td>ICRF is the international standard non-rotating frame, fixed relative to distant quasars. GCRF is the same axes centred on Earth. Same idea as J2000, but more precisely defined.</td></tr><tr><td>Ground track</td><td>The path on the surface directly beneath the satellite.</td></tr><tr><td>Inclination (i)</td><td>The tilt of the orbit from the equator.</td></tr><tr><td>Inertial frame</td><td>A non-rotating reference frame, fixed relative to the stars.</td></tr><tr><td>ISO 8601 duration</td><td>A standard way of writing a length of time: P1DT6H means 1 day 6 hours.</td></tr><tr><td>J2, J3, J4</td><td>Correction terms to gravity for Earth's equatorial bulge and north-south lopsidedness. J2 is the big one: it turns orbit planes and moves perigees.</td></tr><tr><td>Jacobi constant</td><td>The conserved quantity that takes the place of energy around a rotating body.</td></tr><tr><td>Leap second</td><td>A second occasionally added to UTC. An outdated table shifts every UTC epoch by 1 s, about 7.5 km of orbit in LEO.</td></tr><tr><td>LTAN</td><td>Local time of the ascending node: the mean local solar time when the satellite crosses the equator going north.</td></tr><tr><td>LVLH</td><td>Local vertical, local horizontal: a frame riding with the satellite. Radial is straight up away from the parent, along-track is the direction of travel, cross-track is sideways out of the orbit plane.</td></tr><tr><td>Mercator</td><td>The standard flat world map projection.</td></tr><tr><td>mu (\u03BC)</td><td>G times the mass of the parent body. \u03BC/r\xB2 is gravity at distance r from its centre.</td></tr><tr><td>NRLMSISE-00</td><td>The US Naval Research Laboratory's empirical model of the atmosphere, which follows solar and geomagnetic activity.</td></tr><tr><td>Osculating elements</td><td>The exact instantaneous orbital elements, as opposed to averaged ones like in a TLE.</td></tr><tr><td>Parent</td><td>The body the satellites orbit: Earth or a uniform sphere such as an asteroid.</td></tr><tr><td>Parent rotation angle</td><td>How far the parent has spun, so the surface can be shown turning under the orbit.</td></tr><tr><td>Pole RA/Dec, prime meridian</td><td>The direction of a body's spin axis, given like a star's sky coordinates, and how far the body has rotated at the start: where its longitude zero points.</td></tr><tr><td>Precession, nutation</td><td>The slow wobble of Earth's spin axis. Precession alone moves it about 0.36\xB0 between 2000 and 2026, which shifts ground tracks by tens of km if ignored.</td></tr><tr><td>Propagate</td><td>Compute a satellite's position and velocity forward in time.</td></tr><tr><td>RAAN</td><td>Right ascension of the ascending node: where the orbit crosses the equator going north.</td></tr><tr><td>Re-entry</td><td>With drag on, a satellite that falls to 80 km is stopped and reported.</td></tr><tr><td>RK4</td><td>Runge-Kutta 4th order: the standard simple method for stepping equations of motion forward in time with a fixed step.</td></tr><tr><td>Semi-major axis (a)</td><td>Half the long axis of the orbit ellipse: its size.</td></tr><tr><td>SGP4, SDP4</td><td>The standard models for propagating TLEs. SDP4 is the deep-space version for periods of 225 minutes or more.</td></tr><tr><td>Space weather</td><td>Solar flux (F10.7) and geomagnetic activity (Ap) that drive the upper atmosphere.</td></tr><tr><td>SRP</td><td>Solar radiation pressure: the tiny push from sunlight.</td></tr><tr><td>SSO</td><td>Sun-synchronous orbit. Its plane turns 0.9856\xB0 a day to keep pace with the Sun, so it passes overhead at the same local time every day.</td></tr><tr><td>State</td><td>A satellite's position and velocity at one instant.</td></tr><tr><td>Subsolar point</td><td>The spot on Earth with the Sun directly overhead.</td></tr><tr><td>TEME</td><td>The frame SGP4 works in (true equator, mean equinox). It is converted to GCRF before the simulation starts.</td></tr><tr><td>Third body</td><td>The gravity of the Sun and Moon.</td></tr><tr><td>Time scales</td><td>UTC is civil time with leap seconds. TAI, TT, TDB and GPS are atomic or astronomical time scales that differ from UTC by tens of seconds, so the scale must always be stated.</td></tr><tr><td>TLE</td><td>Two-line element set: the standard published orbit format.</td></tr><tr><td>Train</td><td>Satellites following each other in the same orbit, evenly spaced.</td></tr><tr><td>True anomaly</td><td>Where the satellite is on its orbit, measured from periapsis.</td></tr><tr><td>Walker pattern</td><td>The standard constellation layout, written i: T/P/F. T total satellites in P orbital planes, with phasing F between neighbouring planes. Example: 53\xB0: 24/3/1.</td></tr><tr><td>WGS84</td><td>The standard Earth shape used by GPS.</td></tr></table></div>
