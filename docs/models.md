@@ -1,6 +1,6 @@
 # Project Wednesday
 
-Project Wednesday is a simple orbital simulator that can model satellite orbits. My good friend and colleague, Gowtham prefers to treat his Wednesdays as a no meetings day. On this day, he also prefers to work from home which leads to a significant dip in my quality of life because I like bothering him with requests for random orbital simulations. Project Wednesday fills this hole in my heart. I hope it can do the same for you. Enjoy.
+Project Wednesday is a simple orbital simulator that can model satellite orbits. Enjoy.
 
 This page describes what the simulator models. The other pages are the [config reference](config-reference.md) (every config field and every `plan.csv` line), [accuracy and limits](accuracy.md) (how good the results are and how to choose a step size) and the [glossary](glossary.md).
 

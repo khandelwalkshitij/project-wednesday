@@ -4312,10 +4312,10 @@ a.doclink { font-size: 0.92em; }
         o = 6 * i;
         segList[i] = null;
         var bl = c.burns[i];
-        if (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {
+        if (bi[i] < bl.length && bl[bi[i]].t <= tb + eps) {
           var segs = [], cur = y.slice(o, o + 6), fc = f0.slice(o, o + 6), pc = pw0[i], tc = ta, pq = pA;
-          while (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {
-            var B2 = bl[bi[i]++], tq = Math.max(B2.t, tc);
+          while (bi[i] < bl.length && bl[bi[i]].t <= tb + eps) {
+            var B2 = bl[bi[i]++], tq = Math.min(Math.max(B2.t, tc), tb);
             if (tq > tc + 1e-9) {
               var hh = tq - tc, nx = F(6), fx = F(6), pmq = P.poleAt(tt0 + tc + hh / 2);
               pq = P.poleAt(tt0 + tq);
@@ -4608,6 +4608,107 @@ a.doclink { font-size: 0.92em; }
     leapText = $("leap-seconds").textContent.trim();
     S.setLeapSeconds(JSON.parse(leapText), leapText);
     $("version").textContent = "v" + S.VERSION;
+  }
+
+  // src/app/presets-data.js
+  var RE = SimCore.EARTH.a;
+  function kep(a, e, i, raan, argp, ta) {
+    return { type: "keplerian", a_m: a, e, i_deg: i, raan_deg: raan, argp_deg: argp, ta_deg: ta };
+  }
+  var PRESETS = [
+    ["Earth: LTAN drift, sun-synchronous vs 53 deg", function() {
+      var a = RE + 55e4, n = Math.sqrt(SimCore.EARTH.mu / Math.pow(a, 3)), inc = Math.acos(-(0.9856473 * D2R / 86400) / (1.5 * n * SimCore.EARTH.J2 * Math.pow(RE / a, 2))) * R2D;
+      var tt0 = SimCore.parseEpoch("2026-11-10T06:30:00.000 UTC").tt, raan = 0;
+      for (var it = 0; it < 5; it++) {
+        var d = 10.5 - SimCore.ltanHours(SimCore.kepToState(SimCore.EARTH.mu, a, 0, inc * D2R, raan * D2R, 0, 0), tt0, 0);
+        d -= 24 * Math.round(d / 24);
+        raan += d * 15;
+      }
+      raan = Math.round((raan % 360 + 360) % 360 * 1e4) / 1e4;
+      inc = Math.round(inc * 1e4) / 1e4;
+      return {
+        parent: { shape: "earth_default" },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "P5D",
+        integrator: { type: "rk4", time_step_s: 10 },
+        output_step_s: 300,
+        satellites: { count: 2, mass_kg: 150, names: ["SSO 10:30", "Inclined 53"], orbits: [kep(a, 0, inc, raan, 0, 0), kep(a, 0, 53, raan, 0, 0)] }
+      };
+    }],
+    ["Earth: one satellite in low orbit", function() {
+      return {
+        parent: { shape: "earth_default" },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "PT6H",
+        integrator: { type: "rk4", time_step_s: 10 },
+        output_step_s: 30,
+        satellites: { count: 1, mass_kg: 150, names: ["LEO-550"], orbits: [kep(RE + 55e4, 1e-3, 97.6, 40, 90, 0)] }
+      };
+    }],
+    ["Earth: Walker constellation, 12 satellites in 3 planes", function() {
+      return {
+        parent: { shape: "earth_default" },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "PT4H",
+        integrator: { type: "rk4", time_step_s: 10 },
+        output_step_s: 30,
+        satellites: { mass_kg: 150, name_prefix: "SAT", pattern: { type: "walker", a_m: RE + 6e5, e: 0, i_deg: 53, t: 12, p: 3, f: 1, raan0_deg: 0, ta0_deg: 0 } }
+      };
+    }],
+    ["Earth: low orbit, Molniya and geostationary", function() {
+      var st2 = SimCore.kepToState(SimCore.EARTH.mu, RE + 42e4, 5e-4, 51.6 * D2R, 200 * D2R, 0, 0).map(function(v) {
+        return Math.round(v * 1e3) / 1e3;
+      });
+      return {
+        parent: { shape: "earth_default" },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "P1D",
+        integrator: { type: "rk4", time_step_s: 10 },
+        output_step_s: 120,
+        satellites: {
+          count: 3,
+          mass_kg: 500,
+          names: ["LEO state vector", "Molniya", "GEO"],
+          orbits: [{ type: "cartesian", r_m: st2.slice(0, 3), v_m_s: st2.slice(3) }, kep(26554e3, 0.72, 63.4, 80, 270, 180), kep(42164137, 0, 0.05, 0, 0, 100)]
+        }
+      };
+    }],
+    ["Small body: two orbiters and an impact", function() {
+      return {
+        parent: { shape: "sphere_uniform", radius_m: 250, density_kg_m3: 1900, rotation: { spin_period_s: 15480, pole_ra_deg: 85, pole_dec_deg: -60, prime_meridian_deg: 0 } },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "P1D",
+        integrator: { type: "rk4", time_step_s: 20 },
+        output_step_s: 120,
+        satellites: { count: 3, mass_kg: 20, names: ["orbiter", "polar", "impactor"], orbits: [kep(600, 0, 60, 0, 0, 0), kep(450, 0.1, 90, 120, 0, 90), kep(500, 0.6, 30, 0, 0, 180)] }
+      };
+    }],
+    ["Earth: drag decay and re-boost burns", function() {
+      return {
+        parent: { shape: "earth_default" },
+        start_epoch: "2026-11-10T06:30:00.000 UTC",
+        duration: "P3D",
+        integrator: { type: "rk4", time_step_s: 10 },
+        output_step_s: 60,
+        force_model: { drag: true },
+        satellites: { count: 3, mass_kg: 100, cd: 2.2, area_m2: 1, names: ["Decaying 300", "Boosted 300", "High 550"], orbits: [kep(RE + 3e5, 0, 51.6, 10, 0, 0), kep(RE + 3e5, 0, 51.6, 10, 0, 90), kep(RE + 55e4, 0, 97.6, 80, 0, 0)] },
+        maneuvers: [{ sat: "Boosted 300", t_s: 86400, dv_m_s: [0, 2, 0], frame: "lvlh" }, { sat: "Boosted 300", t_s: 172800, dv_m_s: [0, 2, 0], frame: "lvlh" }]
+      };
+    }]
+  ];
+  function resetConfig() {
+    return {
+      parent: { shape: "earth_default" },
+      start_epoch: "2026-11-11T00:00:00.000 UTC",
+      duration: "P1D",
+      integrator: { type: "rk4", time_step_s: 10 },
+      output_step_s: 60,
+      satellites: {
+        count: 1,
+        names: ["SAT-01"],
+        orbits: [{ type: "keplerian", a_m: RE + 5e5, e: 0, i_deg: 53, raan_deg: 0, argp_deg: 0, ta_deg: 0, mass_kg: 100 }]
+      }
+    };
   }
 
   // src/app/util.js
@@ -6241,7 +6342,7 @@ a.doclink { font-size: 0.92em; }
   var DOC_HTML = `<nav class="doc-toc"><b>Pages:</b> <a href="#models" data-doc>Overview and models</a> \xB7 <a href="#config-reference" data-doc>Config reference</a> \xB7 <a href="#accuracy" data-doc>Accuracy and limits</a> \xB7 <a href="#glossary" data-doc>Glossary</a></nav>
 <section class="doc-page">
 <h2 id="models">Project Wednesday</h2>
-<p>Project Wednesday is a simple orbital simulator that can model satellite orbits. My good friend and colleague, Gowtham prefers to treat his Wednesdays as a no meetings day. On this day, he also prefers to work from home which leads to a significant dip in my quality of life because I like bothering him with requests for random orbital simulations. Project Wednesday fills this hole in my heart. I hope it can do the same for you. Enjoy.</p>
+<p>Project Wednesday is a simple orbital simulator that can model satellite orbits. Enjoy.</p>
 <p>This page describes what the simulator models. The other pages are the <a href="#config-reference" data-doc>config reference</a> (every config field and every <code>plan.csv</code> line), <a href="#accuracy" data-doc>accuracy and limits</a> (how good the results are and how to choose a step size) and the <a href="#glossary" data-doc>glossary</a>.</p>
 <h3 id="models--frames-and-time">Frames and time</h3>
 <ul><li><b>Earth (<code>earth_default</code>).</b> The inertial frame is the GCRF: Earth-centred, with ICRF axes. The body-fixed frame is the ITRF, reached with IAU 2006 precession, IAU 2000B nutation (the 77 luni-solar terms of <code>NUT00B</code>) and the Earth rotation angle, with UT1 = UTC + <code>earth_orientation.dut1_s</code>. Polar motion is not applied.</li><li><b>Uniform sphere (<code>sphere_uniform</code>).</b> The inertial frame has ICRF axes centred on the body. The body spins at a fixed rate about a pole given by its right ascension and declination, with the prime meridian angle given at the start epoch (IAU convention).</li><li><b>Time.</b> The integrator runs in TT seconds from J2000. Epochs can be given in UTC, TAI, TT, TDB or GPS. UTC uses the IERS leap-second table kept as data in <code>index.html</code>: TT = UTC + \u0394AT + 32.184 s.</li></ul>
@@ -6514,7 +6615,7 @@ a.doclink { font-size: 0.92em; }
 </section>
 <section class="doc-page">
 <h2 id="accuracy">Accuracy and limits</h2>
-<p>How far the results can be trusted, and how to choose an integration step. The numbers come from the test suite (<code>npm test</code>) and from a benchmark against Orekit, an independent flight-dynamics library (<a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/docs/benchmark-orekit.md" target="_blank" rel="noopener">full results</a>).</p>
+<p>How far the results can be trusted, and how to choose an integration step. The numbers come from the test suite (<code>npm test</code>) and from two comparisons with Orekit, an independent flight-dynamics library: <a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/docs/benchmark-orekit.md" target="_blank" rel="noopener">each model in isolation</a>, and <a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/README.md#validation-against-orekit" target="_blank" rel="noopener">every example config in the app</a>.</p>
 <p>Two kinds of error matter. <b>Numerical error</b> is how far the integrator is from the exact solution of the simulator's own equations; the step setting controls it, and the table below shows how much. <b>Model error</b> is how far those equations are from the real world: an exponential atmosphere instead of the real one, no tesseral gravity and so on. For anything below 1,000 km, model error is usually far larger, especially drag.</p>
 <h3 id="accuracy--what-was-checked">What was checked</h3>
 <div class="doc-tablewrap"><table class="doc-table"><tr><th>Part</th><th>Checked against</th><th>Agreement</th></tr><tr><td>J2-J4 gravity and integrators</td><td>Orekit, 1 to 3 days in LEO, SSO and Molniya orbits</td><td>0.6 to 2.6 mm with DOP853 at rtol 1e-12</td></tr><tr><td>DOP853 integrator</td><td>SciPy's DOP853 (same step count), an analytic Kepler orbit</td><td>0.2 mm after 10 orbits</td></tr><tr><td>SGP4/SDP4 for TLEs</td><td>Vallado's verification vectors; Orekit</td><td>0.1 mm (vectors); 0.03 mm in TEME (Orekit)</td></tr><tr><td>TLE to inertial state</td><td>SGP4 with ERFA's TEME to GCRF</td><td>under 0.1 m. Orekit's TEME definition differs by up to 10 m in GCRF.</td></tr><tr><td>NRLMSISE-00 density</td><td>NRL's original Fortran; Orekit with the same space weather</td><td>8e-5 relative; 1.3e-5 relative</td></tr><tr><td>Drag runs (NRLMSISE-00, 400 km, 1 day)</td><td>Orekit</td><td>5 mm on a quiet day, 0.2 m on the May 2024 storm day</td></tr><tr><td>Sun and Moon gravity</td><td>Orekit (30 days in GEO); the textbook GEO tilt rate</td><td>1.2 cm; 0.95\xB0 a year in 2026</td></tr><tr><td>Moon position</td><td>ERFA <code>eraMoon98</code></td><td>under 1 mm (the model itself is good to about 6 km)</td></tr><tr><td>Earth orientation</td><td>ERFA's full IAU 2006/2000A (<code>c2t06a</code>)</td><td>7.5 mm at the surface</td></tr><tr><td>Time scales (UTC, TAI, TT, TDB, GPS)</td><td>ERFA</td><td>0.12 \xB5s</td></tr><tr><td>Energy bookkeeping</td><td>every run reports it</td><td>relative energy drift typically 1e-9 or less</td></tr></table></div>
@@ -7438,99 +7539,12 @@ a.doclink { font-size: 0.92em; }
   }
 
   // src/app/presets.js
-  var RE;
-  function kep(a, e, i, raan, argp, ta) {
-    return { type: "keplerian", a_m: a, e, i_deg: i, raan_deg: raan, argp_deg: argp, ta_deg: ta };
-  }
-  var PRESETS;
   var defaultOpt;
   function setPreset(i) {
     $("config").value = JSON.stringify(PRESETS[i][1](), null, 2);
     renderForm();
   }
   function init13() {
-    RE = S.EARTH.a;
-    PRESETS = [
-      ["Earth: LTAN drift, sun-synchronous vs 53 deg", function() {
-        var a = RE + 55e4, n = Math.sqrt(S.EARTH.mu / Math.pow(a, 3)), inc = Math.acos(-(0.9856473 * D2R2 / 86400) / (1.5 * n * S.EARTH.J2 * Math.pow(RE / a, 2))) * R2D2;
-        var tt0 = S.parseEpoch("2026-11-10T06:30:00.000 UTC").tt, raan = 0;
-        for (var it = 0; it < 5; it++) {
-          var d = 10.5 - S.ltanHours(S.kepToState(S.EARTH.mu, a, 0, inc * D2R2, raan * D2R2, 0, 0), tt0, 0);
-          d -= 24 * Math.round(d / 24);
-          raan += d * 15;
-        }
-        raan = Math.round((raan % 360 + 360) % 360 * 1e4) / 1e4;
-        inc = Math.round(inc * 1e4) / 1e4;
-        return {
-          parent: { shape: "earth_default" },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "P5D",
-          integrator: { type: "rk4", time_step_s: 10 },
-          output_step_s: 300,
-          satellites: { count: 2, mass_kg: 150, names: ["SSO 10:30", "Inclined 53"], orbits: [kep(a, 0, inc, raan, 0, 0), kep(a, 0, 53, raan, 0, 0)] }
-        };
-      }],
-      ["Earth: one satellite in low orbit", function() {
-        return {
-          parent: { shape: "earth_default" },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "PT6H",
-          integrator: { type: "rk4", time_step_s: 10 },
-          output_step_s: 30,
-          satellites: { count: 1, mass_kg: 150, names: ["LEO-550"], orbits: [kep(RE + 55e4, 1e-3, 97.6, 40, 90, 0)] }
-        };
-      }],
-      ["Earth: Walker constellation, 12 satellites in 3 planes", function() {
-        return {
-          parent: { shape: "earth_default" },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "PT4H",
-          integrator: { type: "rk4", time_step_s: 10 },
-          output_step_s: 30,
-          satellites: { mass_kg: 150, name_prefix: "SAT", pattern: { type: "walker", a_m: RE + 6e5, e: 0, i_deg: 53, t: 12, p: 3, f: 1, raan0_deg: 0, ta0_deg: 0 } }
-        };
-      }],
-      ["Earth: low orbit, Molniya and geostationary", function() {
-        var st2 = S.kepToState(S.EARTH.mu, RE + 42e4, 5e-4, 51.6 * D2R2, 200 * D2R2, 0, 0).map(function(v) {
-          return Math.round(v * 1e3) / 1e3;
-        });
-        return {
-          parent: { shape: "earth_default" },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "P1D",
-          integrator: { type: "rk4", time_step_s: 10 },
-          output_step_s: 120,
-          satellites: {
-            count: 3,
-            mass_kg: 500,
-            names: ["LEO state vector", "Molniya", "GEO"],
-            orbits: [{ type: "cartesian", r_m: st2.slice(0, 3), v_m_s: st2.slice(3) }, kep(26554e3, 0.72, 63.4, 80, 270, 180), kep(42164137, 0, 0.05, 0, 0, 100)]
-          }
-        };
-      }],
-      ["Small body: two orbiters and an impact", function() {
-        return {
-          parent: { shape: "sphere_uniform", radius_m: 250, density_kg_m3: 1900, rotation: { spin_period_s: 15480, pole_ra_deg: 85, pole_dec_deg: -60, prime_meridian_deg: 0 } },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "P1D",
-          integrator: { type: "rk4", time_step_s: 20 },
-          output_step_s: 120,
-          satellites: { count: 3, mass_kg: 20, names: ["orbiter", "polar", "impactor"], orbits: [kep(600, 0, 60, 0, 0, 0), kep(450, 0.1, 90, 120, 0, 90), kep(500, 0.6, 30, 0, 0, 180)] }
-        };
-      }],
-      ["Earth: drag decay and re-boost burns", function() {
-        return {
-          parent: { shape: "earth_default" },
-          start_epoch: "2026-11-10T06:30:00.000 UTC",
-          duration: "P3D",
-          integrator: { type: "rk4", time_step_s: 10 },
-          output_step_s: 60,
-          force_model: { drag: true },
-          satellites: { count: 3, mass_kg: 100, cd: 2.2, area_m2: 1, names: ["Decaying 300", "Boosted 300", "High 550"], orbits: [kep(RE + 3e5, 0, 51.6, 10, 0, 0), kep(RE + 3e5, 0, 51.6, 10, 0, 90), kep(RE + 55e4, 0, 97.6, 80, 0, 0)] },
-          maneuvers: [{ sat: "Boosted 300", t_s: 86400, dv_m_s: [0, 2, 0], frame: "lvlh" }, { sat: "Boosted 300", t_s: 172800, dv_m_s: [0, 2, 0], frame: "lvlh" }]
-        };
-      }]
-    ];
     defaultOpt = el("option", "New Trial");
     defaultOpt.value = "";
     $("preset").appendChild(defaultOpt);
@@ -7547,18 +7561,7 @@ a.doclink { font-size: 0.92em; }
     });
     $("newCfg").addEventListener("click", function() {
       $("preset").value = "";
-      $("config").value = JSON.stringify({
-        parent: { shape: "earth_default" },
-        start_epoch: "2026-11-11T00:00:00.000 UTC",
-        duration: "P1D",
-        integrator: { type: "rk4", time_step_s: 10 },
-        output_step_s: 60,
-        satellites: {
-          count: 1,
-          names: ["SAT-01"],
-          orbits: [{ type: "keplerian", a_m: RE + 5e5, e: 0, i_deg: 53, raan_deg: 0, argp_deg: 0, ta_deg: 0, mass_kg: 100 }]
-        }
-      }, null, 2);
+      $("config").value = JSON.stringify(resetConfig(), null, 2);
       showErrors(null);
       renderForm();
     });

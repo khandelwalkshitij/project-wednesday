@@ -1,6 +1,6 @@
 # Accuracy and limits
 
-How far the results can be trusted, and how to choose an integration step. The numbers come from the test suite (`npm test`) and from a benchmark against Orekit, an independent flight-dynamics library ([full results](benchmark-orekit.md)).
+How far the results can be trusted, and how to choose an integration step. The numbers come from the test suite (`npm test`) and from two comparisons with Orekit, an independent flight-dynamics library: [each model in isolation](benchmark-orekit.md), and [every example config in the app](../README.md#validation-against-orekit).
 
 Two kinds of error matter. **Numerical error** is how far the integrator is from the exact solution of the simulator's own equations; the step setting controls it, and the table below shows how much. **Model error** is how far those equations are from the real world: an exponential atmosphere instead of the real one, no tesseral gravity and so on. For anything below 1,000 km, model error is usually far larger, especially drag.
 

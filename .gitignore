@@ -1,3 +1,6 @@
 node_modules/
 tests/browser/out/
 .DS_Store
+validation/runs/
+validation/orekit-data/
+__pycache__/

@@ -2,6 +2,8 @@
 
 ## 0.4.0
 
+- Validated against Orekit on every example config plus two SRP cases. Table in the README, scripts in `validation/`.
+- Fixed: a burn landing exactly on an integration step boundary showed the pre-burn state in that row, while off-grid burns showed post-burn. Both now show post-burn. Found by the Orekit comparison.
 - Documentation: `docs/config-reference.md` (every config field, with complete examples, and the plan.csv format), `docs/models.md`, `docs/accuracy.md` (validation numbers and a step-size table from `tools/step-table.mjs`) and `docs/glossary.md`. The app's Documentation tab and the field list under the JSON box are generated from them (`npm run docs`, `tools/build-docs.mjs`). A test runs every JSON example in the docs and README and checks that the generated files are current, that links resolve and that every config field is documented. The form links to Accuracy and limits from the integrator settings.
 - Requirement sheets: every row now has a status. plan.csv now starts `# plan.csv written by Project Wednesday`.
 - Benchmark against Orekit (`tools/bench_orekit.py`, results in `docs/benchmark-orekit.md`).

@@ -249,10 +249,11 @@ export function* simulate(rawConfig) {
     for (i = 0; i < N; i++) {
       if (!alive[i]) continue; o = 6 * i; segList[i] = null;
       var bl = c.burns[i];
-      if (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {       // step containing one or more burns: split at each burn time
+      if (bi[i] < bl.length && bl[bi[i]].t <= tb + eps) {      // step containing one or more burns: split at each burn time. A burn on the step end is
+                                                                  // applied in this step, so the row at the burn epoch always shows the post-burn state
         var segs = [], cur = y.slice(o, o + 6), fc = f0.slice(o, o + 6), pc = pw0[i], tc = ta, pq = pA;
-        while (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {
-          var B = bl[bi[i]++], tq = Math.max(B.t, tc);
+        while (bi[i] < bl.length && bl[bi[i]].t <= tb + eps) {
+          var B = bl[bi[i]++], tq = Math.min(Math.max(B.t, tc), tb);
           if (tq > tc + 1e-9) {
             var hh = tq - tc, nx = F(6), fx = F(6), pmq = P.poleAt(tt0 + tc + hh / 2); pq = P.poleAt(tt0 + tq);
             var sdmq = isE ? sunDirection(tt0 + tc + hh / 2) : null, sdq_end = isE ? sunDirection(tt0 + tq) : null;
