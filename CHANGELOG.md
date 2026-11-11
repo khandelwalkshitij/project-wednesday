@@ -4,7 +4,7 @@
 
 - Validated against Orekit on every example config plus two SRP cases. Table in the README, scripts in `validation/`.
 - The Orekit validation table in the README is rerun for v0.4.0 and extended with six cases for the new features: DOP853 on two example configs, NRLMSISE-00 drag on a quiet and a storm day, and Sun and Moon gravity in LEO and GEO (`validation/`).
-- The Documentation tab has a plain HTML look: serif text, default headings, underlined links, simple table borders, no shading or boxes.
+- The Documentation tab is a simple page that keeps the earlier look's character: the app's font, navy headings with rules, grey table headers and lightly shaded examples, without boxes or bevels.
 - Fixed: a burn landing exactly on an integration step boundary showed the pre-burn state in that row, while off-grid burns showed post-burn. Both now show post-burn. Found by the Orekit comparison.
 - Documentation: `docs/config-reference.md` (every config field, with complete examples, and the plan.csv format), `docs/models.md`, `docs/accuracy.md` (validation numbers and a step-size table from `tools/step-table.mjs`) and `docs/glossary.md`. The app's Documentation tab and the field list under the JSON box are generated from them (`npm run docs`, `tools/build-docs.mjs`). A test runs every JSON example in the docs and README and checks that the generated files are current, that links resolve and that every config field is documented. The form links to Accuracy and limits from the integrator settings.
 - Requirement sheets: every row now has a status. plan.csv now starts `# plan.csv written by Project Wednesday`.
