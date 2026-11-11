@@ -159,7 +159,7 @@ export function renderForm() {
           if (sa.area_m2 === undefined) sa.area_m2 = 1;
         }
       } else {
-        delete c.force_model.drag;
+        delete c.force_model.drag; delete c.force_model.atmosphere; delete c.force_model.space_weather;
         if (!Object.keys(c.force_model).length) delete c.force_model;
       }
       commit(true);
@@ -198,7 +198,21 @@ export function renderForm() {
       mk('label', { cls: 'ff inl' }, [cbSrp, mk('span', { text: 'Solar radiation pressure (SRP)' })]),
       mk('label', { cls: 'ff inl' }, [cbTb, mk('span', { text: 'Sun and Moon gravity' })])
     ];
-    formRoot.appendChild(grp('Forces (gravity is always on)', [row(fkids)], '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br>• <b>Sun and Moon gravity</b>: third-body pull of the Sun and Moon as point masses. Tens to hundreds of metres a day in LEO; the main perturbation in GEO (inclination grows about 0.75 to 0.95° a year).<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
+    var frows = [row(fkids)];
+    if (dragOn) {
+      var fmo = c.force_model, isMsis = fmo.atmosphere === 'nrlmsise00', swFix = isMsis && fmo.space_weather && typeof fmo.space_weather === 'object';
+      var arow = [lab('Atmosphere', selIn([['exponential', 'Exponential (no solar activity)'], ['nrlmsise00', 'NRLMSISE-00 (solar activity)']], isMsis ? 'nrlmsise00' : 'exponential', function (v) {
+        if (v === 'nrlmsise00') fmo.atmosphere = 'nrlmsise00'; else { delete fmo.atmosphere; delete fmo.space_weather; } commit(true);
+      }))];
+      if (isMsis) {
+        var cbSw = mk('input', { type: 'checkbox', checked: !!swFix });
+        cbSw.addEventListener('change', function () { if (cbSw.checked) fmo.space_weather = { f107: 150, f107a: 150, ap: 15 }; else delete fmo.space_weather; commit(true); });
+        arow.push(mk('label', { cls: 'ff inl' }, [cbSw, mk('span', { text: 'Fixed space weather' })]));
+        if (swFix) arow.push(lab('F10.7', numIn(fmo.space_weather, 'f107', { w: 55 })), lab('F10.7 81-day', numIn(fmo.space_weather, 'f107a', { w: 55 })), lab('Ap', numIn(fmo.space_weather, 'ap', { w: 45 })));
+      }
+      frows.push(row(arow));
+    }
+    formRoot.appendChild(grp('Forces (gravity is always on)', frows, '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br>• <b>Atmosphere</b>: the exponential table is a fixed, moderate-activity profile. <b>NRLMSISE-00</b> follows solar flux (F10.7) and geomagnetic activity (Ap) from a bundled CelesTrak table (measured to mid-2025, predicted after), or from fixed values you enter. Drag can change tenfold over the solar cycle.<br>• <b>Sun and Moon gravity</b>: third-body pull of the Sun and Moon as point masses. Tens to hundreds of metres a day in LEO; the main perturbation in GEO (inclination grows about 0.75 to 0.95° a year).<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
   }
   // satellites
   var mode = sa.pattern && typeof sa.pattern === 'object' ? (sa.pattern.type === 'train' ? 'train' : 'walker') : 'list';

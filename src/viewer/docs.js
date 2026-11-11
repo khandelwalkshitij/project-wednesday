@@ -30,7 +30,11 @@ export function init() {
       <h3>Atmospheric Drag (<span class="math"><b>a</b><sub>drag</sub></span>)</h3>
       <p>Active when <code>force_model.drag = true</code> and altitude &lt; 1,500 km. Drag deceleration is given by:</p>
       <p style="text-align: center;"><span class="math"><b>a</b><sub>drag</sub> = -&frac12; C<sub>d</sub> (A/m) &rho; v<sub>rel</sub> <b>v</b><sub>rel</sub></span></p>
-      <p>Where <span class="math"><b>v</b><sub>rel</sub></span> is the satellite velocity relative to the co-rotating atmosphere. Density <span class="math">&rho;</span> comes from a piecewise-exponential table (Vallado's table: US Standard Atmosphere 1976 up to 25 km, CIRA-72 above). It ignores solar activity, so real decay rates can differ by a factor of several.</p>
+      <p>Where <span class="math"><b>v</b><sub>rel</sub></span> is the satellite velocity relative to the co-rotating atmosphere. Density <span class="math">&rho;</span> comes from one of two models (<code>force_model.atmosphere</code>):</p>
+      <ul style="margin-left: 20px;">
+        <li><b>Exponential</b> (default): a piecewise-exponential table (Vallado's table: US Standard Atmosphere 1976 up to 25 km, CIRA-72 above). It is a fixed, moderate-activity profile that ignores solar activity, so real decay rates can differ by a factor of several.</li>
+        <li><b>NRLMSISE-00</b> (<code>"atmosphere": "nrlmsise00"</code>): the NRL empirical model (Picone et al. 2002), which varies with latitude, local time, season, solar flux and geomagnetic activity. Drag at 400 km is roughly ten times stronger at solar maximum than at minimum, and doubles again in a major storm. Inputs are the previous day's observed F10.7, its 81-day centred mean and the 3-hour ap history, taken from a CelesTrak space-weather table bundled with the page (measured values to 20 July 2025, then CelesTrak's daily and monthly predictions; monthly predictions have no Ap, so Ap = 15 is used, and beyond October 2041 F10.7 = 150 and Ap = 15). The setup warnings say when predicted or default values are used. To use your own values, set any of <code>force_model.space_weather: {"f107": 150, "f107a": 150, "ap": 15}</code>; fixing Ap switches to the daily-Ap form of the model. Nothing is fetched from the network. With the adaptive integrator, steps stop at each 3-hour space-weather boundary so the change in density never falls inside a step.</li>
+      </ul>
       
       <h3>Solar Radiation Pressure (<span class="math"><b>a</b><sub>srp</sub></span>)</h3>
       <p>Active when <code>force_model.srp = true</code>. Acceleration is directed strictly away from the Sun:</p>
@@ -146,6 +150,9 @@ export function init() {
   </li>
   <li>
     <b>Cartographic Vectors:</b> Continental outlines and shoreline reference polygons are derived from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> public-domain vector datasets.
+  </li>
+  <li>
+    <b>Atmosphere &amp; Space Weather:</b> NRLMSISE-00 (Picone, Hedin, Drob &amp; Aikin 2002), ported from the public-domain C version by Dominik Brodowski; a U.S. Government work not subject to copyright, with no endorsement by the Naval Research Laboratory implied. Space weather from <a href="https://celestrak.org/SpaceData/" target="_blank" rel="noopener">CelesTrak</a> (SW-All.txt).
   </li>
   <li>
     <b>Moon Ephemeris:</b> Lunar series from Meeus, <i>Astronomical Algorithms</i>, as tabulated in <a href="https://github.com/liberfa/erfa" target="_blank" rel="noopener">ERFA</a> (BSD-style licence, derived from IAU SOFA).

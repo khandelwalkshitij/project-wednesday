@@ -10,7 +10,7 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Earth orientation:** GCRF to ITRF with IAU 2006 precession, IAU 2000B nutation (77 terms) and the Earth rotation angle. Checked against ERFA. Polar motion not applied.
 - **Time:** UTC, TAI, TT, TDB, GPS, with the IERS leap-second table kept as data in `index.html`.
 - **Integrators:** fixed-step RK4 (output rows Hermite-interpolated), or adaptive DOP853 with rtol/atol step control and 7th-order dense output. DOP853 steps land on burns and shadow boundaries. Either way the output step is independent of the integration step.
-- **Drag:** exponential atmosphere (Vallado's table), co-rotating air, re-entry declared at 80 km. No solar activity.
+- **Drag:** co-rotating air, re-entry declared at 80 km. Exponential atmosphere (Vallado's table, no solar activity), or NRLMSISE-00 driven by a bundled CelesTrak table of F10.7 and 3-hour ap (measured to July 2025, predicted after), with fixed values as an override. Nothing is fetched at run time.
 - **Solar radiation pressure:** cannonball model, 4.56e-6 N/m² at 1 AU scaled by 1/r², switched off in a cylindrical Earth shadow. Cr can be a constant or a time schedule.
 - **Sun and Moon gravity:** point masses, Moon from the Meeus series as in ERFA `eraMoon98`, Sun from a low-precision analytic formula. Optional (`force_model.third_body`).
 - **Burns:** impulsive, in LVLH (radial, along-track, cross-track) or inertial axes, applied at the exact commanded time.
@@ -29,13 +29,15 @@ src/main.js              entry point: runs each app module's init() in order
 src/core/                physics, no DOM. Runs in the browser and in Node
   constants, math, time, earth-orientation, elements, environment, parent, sun,
   interp, patterns, tle, cr-schedule, config, propagator, plan-csv, ltan, index
-src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients, Moon series
+src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients, Moon series, NRLMSISE-00 coefficients, space weather
 src/app/                 page logic: boot, presets, form, run, report, infotip, start
 src/viewer/              three.js globe, Mercator map, charts, docs tab, playback loop
 scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
 src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
 tests/core/              Node tests for the physics (ERFA, SGP4, SciPy DOP853 and independent-integrator checks)
+tools/gen_space_weather.py  rebuilds the space-weather table from a CelesTrak SW-All.txt (download a fresh one to update it)
+tools/gen_nrlmsise00.py  regenerates the NRLMSISE-00 coefficients and their pymsis test truth
 tools/gen_moon98.py      regenerates the Moon series from ERFA moon98.c and its pyerfa test truth
 tools/gen_dop853.py      regenerates the DOP853 coefficient table and its SciPy test truth
 tests/browser/           Playwright smoke test of both builds
@@ -96,4 +98,4 @@ npm install
 
 ## Licence
 
-MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). SGP4/SDP4 from satellite.js 6.0.2 (MIT, see `src/vendor/sgp4.js`). Nutation, TDB and Moon series coefficients from ERFA (BSD-style licence, derived from IAU SOFA).
+MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). SGP4/SDP4 from satellite.js 6.0.2 (MIT, see `src/vendor/sgp4.js`). NRLMSISE-00 ported from Dominik Brodowski's public-domain C version (U.S. Government work, no NRL endorsement implied). Space weather from CelesTrak (https://celestrak.org/SpaceData/). Nutation, TDB and Moon series coefficients from ERFA (BSD-style licence, derived from IAU SOFA).

@@ -6,13 +6,18 @@ import { Dop853 } from './dop853.js';
 import { earthRotation, poleRaDec, primeMeridianAngle } from './earth-orientation.js';
 import { stateToKep } from './elements.js';
 import { ATMO, atmosphereDensity, geoHeight, geodetic } from './environment.js';
+import { msisAt } from './atmosphere.js';
+import { PD, PDM, PT } from '../data/nrlmsise00-data.js';
+import { MOON_B, MOON_LR } from '../data/moon98-series.js';
+import { SW_DAILY } from '../data/space-weather.js';
+import { spaceWeather, spaceWeatherVersion } from './space-weather.js';
 import { hermite } from './interp.js';
 import { fitLine, fmtHms, ltanFromMatrix, unwrapHours } from './ltan.js';
-import { crc32, mvec } from './math.js';
+import { crc32, mmul, mvec, rotZ } from './math.js';
 import { moonPosition } from './moon.js';
 import { makeParent } from './parent.js';
 import { inShadow, sunDirection, sunDistanceAu } from './sun.js';
-import { formatUtc, leap } from './time.js';
+import { formatUtc, leap, utcNominal } from './time.js';
 import { NUT00B } from '../data/nutation-iau2000b.js';
 import { TDB_TERMS } from '../data/tdb-series.js';
 
@@ -20,6 +25,9 @@ import { TDB_TERMS } from '../data/tdb-series.js';
 export var COLUMNS = [['sat_name', '-', '-'], ['epoch_utc', 'ISO 8601, UTC', '-'], ['t_s', 's since start_epoch', '-'], ['x_m', 'm', 'inertial'], ['y_m', 'm', 'inertial'], ['z_m', 'm', 'inertial'],
   ['vx_m_s', 'm/s', 'inertial'], ['vy_m_s', 'm/s', 'inertial'], ['vz_m_s', 'm/s', 'inertial'], ['parent_rot_deg', 'deg', 'prime meridian angle W about the parent pole'],
   ['in_shadow', '1 in Earth shadow (cylindrical) / 0 sunlit / blank when no Sun is modelled', '-']];
+
+var CRC_CACHE = {};
+function dataCrc(name, text) { if (!(name in CRC_CACHE)) CRC_CACHE[name] = crc32(text()); return CRC_CACHE[name]; }
 
 export function fmtT(t) { return String(Math.round(t * 1e6) / 1e6); }
 
@@ -50,7 +58,7 @@ export function* simulate(rawConfig) {
       var zz = x * p[0] + yy * p[1] + z * p[2], hgt = geoHeight(Math.sqrt(Math.max(0, x * x + yy * yy + z * z - zz * zz)), zz);
       if (hgt <= 1.5e6) {
         var w = EARTH.omega, rx = vx - w * (p[1] * z - p[2] * yy), ry = vy - w * (p[2] * x - p[0] * z), rz = vz - w * (p[0] * yy - p[1] * x);   // velocity relative to the co-rotating air
-        var k = -b * atmosphereDensity(hgt) * Math.sqrt(rx * rx + ry * ry + rz * rz);
+        var k = -b * densityAt(t, x, yy, z, hgt) * Math.sqrt(rx * rx + ry * ry + rz * rz);
         out[oo + 3] += k * rx; out[oo + 4] += k * ry; out[oo + 5] += k * rz;
         pwr += k * (rx * vx + ry * vy + rz * vz);
       }
@@ -104,6 +112,26 @@ export function* simulate(rawConfig) {
 
   // ---------------------------------------------------------------- adaptive DOP853 (SIM_017). Satellites do not interact, so each gets its own
   // step sequence; rows come from the 7th-order dense output and are written in the same time order as the RK4 path.
+  // ---------------------------------------------------------------- atmosphere: exponential table, or NRLMSISE-00 with space weather
+  // Space weather is piecewise constant over 3-hour UTC slots. The adaptive path stops each step at a slot boundary and holds the slot
+  // (swLock) for the whole step, for the same reason as the shadow switch below.
+  var swo = c.spaceWeather || {}, swFixed = swo.f107 !== undefined && swo.f107a !== undefined && swo.ap !== undefined;
+  var msis = drag && c.atmosphere === 'nrlmsise00', swVaries = msis && !swFixed, swLock = null, c2iTab = null, swKey = NaN, swNow = null;
+  function c2iAt(t) {        // GCRF -> CIRS (precession-nutation, no Earth rotation) on a 60 s grid; Earth rotation is applied exactly per call
+    var u = t / 60, j = Math.max(0, Math.floor(u)), s = u - j, q, k, out = new Array(9);
+    if (!c2iTab) { c2iTab = F(9 * (Math.ceil(c.duration / 60) + 3)); c2iTab.fill(NaN); }
+    for (q = j; q <= j + 1; q++) if (isNaN(c2iTab[9 * q])) { var er = earthRotation(tt0 + q * 60, P.dut1), m = mmul(rotZ(-er.era), er.M); for (k = 0; k < 9; k++) c2iTab[9 * q + k] = m[k]; }
+    for (k = 0; k < 9; k++) out[k] = c2iTab[9 * j + k] + s * (c2iTab[9 * j + 9 + k] - c2iTab[9 * j + k]);
+    return out;
+  }
+  function densityAt(t, x, yy, z, hgt) {
+    if (!msis) return atmosphereDensity(hgt);
+    var utc = utcNominal(tt0 + t), m = c2iAt(t), bx = m[0] * x + m[1] * yy + m[2] * z, by = m[3] * x + m[4] * yy + m[5] * z, bz = m[6] * x + m[7] * yy + m[8] * z;
+    var g = geodetic(bx, by, bz, EARTH.a, EARTH.f), tu = (utc + (P.dut1 || 0)) / 86400, era = TWO_PI * ((tu % 1 + 1) % 1 + 0.7790572732640 + 0.00273781191135448 * tu);
+    var lon = ((g.lon - era) * R2D % 360 + 540) % 360 - 180, key = swLock !== null ? swLock : Math.floor((utc + 43200) / 10800);
+    if (key !== swKey) { swKey = key; swNow = spaceWeather(key * 10800 - 43200 + 1e-3, c.spaceWeather); }
+    return msisAt(utc, g.lat * R2D, lon, g.h / 1000, swNow);
+  }
   var POLE_DT = 60, poleTab = null, BODY_DT = 60, bodyTab = null, bodyOut = F(6);
   function bodiesAt(t) {     // Sun and Moon GCRF positions [m] on a 60 s grid, linearly interpolated (Moon ~1 m, Sun ~3 m off; both far below the models' own error)
     var u = t / BODY_DT, j = Math.max(0, Math.floor(u)), s = u - j, q, k;
@@ -158,9 +186,13 @@ export function* simulate(rawConfig) {
       for (k = 0; k < 6; k++) y7[k] = sat.state[k];
       st = new Dop853(7, 6, fun, { rtol: c.rtol, atol: c.atol, maxStep: c.maxStep, initialStep: c.initialStep }); st.init(0, y7, dur);
       bj = burnsAt(i, 0, bl, bj);
-      var tEvent = Infinity;
+      var tEvent = Infinity, u0 = utcNominal(tt0);
       while (st.t < dur - epsA) {
-        var tLim = Math.min(bj < bl.length && bl[bj].t < dur - epsA ? bl[bj].t : dur, tEvent);
+        if (swVaries) {           // entering a new 3-hour space-weather slot: hold it for the coming steps, recompute the step-start derivative
+          var slot = Math.floor((u0 + st.t + 43200 + 1e-6) / 10800);
+          if (slot !== swLock) { var firstSlot = swLock === null; swLock = slot; if (!firstSlot) st.reset(); }
+        }
+        var tLim = Math.min(bj < bl.length && bl[bj].t < dur - epsA ? bl[bj].t : dur, tEvent, swVaries ? (swLock + 1) * 10800 - 43200 - u0 : Infinity);
         if (!st.step(tLim)) throw new Error('integrator: the dop853 step size became too small for "' + sat.name + '" at t = ' + st.t.toFixed(3) + ' s. Loosen rtol or atol.');
         if (++stats.steps > LIMITS.maxSatSteps) throw new Error('integrator: run needs more than ' + LIMITS.maxSatSteps + ' satellite-steps. Loosen rtol or atol, or shorten the run');
         if (shadowEvents) {
@@ -184,7 +216,7 @@ export function* simulate(rawConfig) {
         bj = burnsAt(i, tb, bl, bj);
         if (stats.steps % 300 === 0) yield (i + tb / dur) / N;
       }
-      nValid[i] = kO; outS.push(buf);
+      nValid[i] = kO; outS.push(buf); swLock = null;
       stats.rejected += st.rejected; if (st.hMin < stats.hMin) stats.hMin = st.hMin; if (st.hMax > stats.hMax) stats.hMax = st.hMax;
     }
     for (var kk = 1; kk < nOut; kk++) {
@@ -276,11 +308,15 @@ export function* simulate(rawConfig) {
   H.push('# body_fixed_frame: ' + P.bodyFrame);
   H.push('# integrator: ' + (aStats ? 'dop853; rtol=' + c.rtol + '; atol=' + c.atol + (c.maxStep < Infinity ? '; max_step_s=' + c.maxStep : '') + '; accepted_steps=' + aStats.steps + '; rejected_steps=' + aStats.rejected + '; shadow_events=' + aStats.events +
     (aStats.hMax > 0 ? '; step_s_min=' + (aStats.hMin < Infinity ? aStats.hMin : aStats.hMax).toPrecision(4) + '; step_s_max=' + aStats.hMax.toPrecision(4) : '') : 'rk4; time_step_s=' + h));
-  var fmArr = ['gravity']; if (drag) fmArr.push('drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); if (tb3) fmArr.push('Sun and Moon point-mass gravity (Moon: Meeus/ERFA moon98; Sun: low-precision analytic)'); H.push('# force_model: ' + fmArr.join(' + '));
+  var fmArr = ['gravity'];
+  if (drag) fmArr.push('drag (' + (msis ? 'NRLMSISE-00 atmosphere, ' + (swFixed ? 'fixed F10.7=' + swo.f107 + ', F10.7A=' + swo.f107a + ', Ap=' + swo.ap : 'space weather from the bundled CelesTrak table' + (Object.keys(swo).length ? ' with ' + Object.keys(swo).map(function (k) { return k + '=' + swo[k]; }).join(', ') + ' fixed' : '')) : 'exponential atmosphere') + ', co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); if (tb3) fmArr.push('Sun and Moon point-mass gravity (Moon: Meeus/ERFA moon98; Sun: low-precision analytic)'); H.push('# force_model: ' + fmArr.join(' + '));
   H.push('# parent_pole_ra_deg: ' + (rd[0] * R2D).toFixed(9));
   H.push('# parent_pole_dec_deg: ' + (rd[1] * R2D).toFixed(9));
   H.push('# data_file: name=' + leap.name + '; version=' + leap.version + '; crc32=' + leap.checksum + '; source=' + leap.source);
   H.push('# data_file: name=builtin_models; version=' + VERSION + '; crc32=' + crc32(JSON.stringify([NUT00B, TDB_TERMS, EARTH, ATMO])) + '; source=WGS84, EGM96 zonals J2-J4, IAU 2006 precession, IAU 2000B nutation, Fairhead-Bretagnon TDB series');
+  if (msis) H.push('# data_file: name=nrlmsise00_coefficients; version=NRLMSISE-00 (2001); crc32=' + dataCrc('msis', function () { return JSON.stringify([PT, PD, PDM]); }) + '; source=Picone et al. 2002, C port by D. Brodowski');
+  if (msis && !swFixed) H.push('# data_file: name=space_weather; version=' + spaceWeatherVersion() + '; crc32=' + dataCrc('sw', function () { return SW_DAILY; }) + '; source=CelesTrak SW-All.txt, https://celestrak.org/SpaceData/');
+  if (tb3) H.push('# data_file: name=moon98_series; version=ERFA moon98 (Meeus 1998); crc32=' + dataCrc('moon', function () { return JSON.stringify([MOON_LR, MOON_B]); }) + '; source=ERFA moon98.c');
   H.push('# config: ' + JSON.stringify(rawConfig));
   COLUMNS.forEach(function (col) { H.push('# column: ' + col[0] + '; unit: ' + col[1] + '; frame: ' + (col[2] === 'inertial' ? P.frame : col[2])); });
   var hasJ = P.shape === 'sphere_uniform';   // Earth's pole moves (precession-nutation), so only inertial energy is conserved there

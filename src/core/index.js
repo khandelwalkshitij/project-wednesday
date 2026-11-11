@@ -5,6 +5,7 @@ import { getCr, parseCr } from './cr-schedule.js';
 import { bodyMatrix, earthPole, earthRotation, poleRaDec, primeMeridianAngle } from './earth-orientation.js';
 import { kepToState, stateToKep } from './elements.js';
 import { atmosphereDensity, geodetic, magneticField } from './environment.js';
+import { msisDensity } from './atmosphere.js';
 import { hermite, interpState } from './interp.js';
 import { fitLine, fmtHms, ltanFromMatrix, ltanHours, unwrapHours } from './ltan.js';
 import { crc32, mTvec, mvec } from './math.js';
@@ -21,6 +22,6 @@ export var SimCore = { VERSION: VERSION, G: G, EARTH: EARTH, LIMITS: LIMITS, Con
   tdbMinusTt: tdbMinusTt, earthRotation: earthRotation, earthPole: earthPole, bodyMatrix: bodyMatrix, poleRaDec: poleRaDec, primeMeridianAngle: primeMeridianAngle,
   kepToState: kepToState, stateToKep: stateToKep, geodetic: geodetic, atmosphereDensity: atmosphereDensity, magneticField: magneticField, makeParent: makeParent,
   normalizeConfig: normalizeConfig, simulate: simulate, run: run, parsePlanCsv: parsePlanCsv, mvec: mvec, mTvec: mTvec, hermite: hermite, crc32: crc32,
-  sunDirection: sunDirection, inShadow: inShadow, betaAngle: betaAngle, interpState: interpState, eclipseEvents: eclipseEvents, expandPattern: expandPattern, parseTle: parseTle, tleState: tleState, sgp4: sgp4, getCr: getCr, parseCr: parseCr,
+  sunDirection: sunDirection, inShadow: inShadow, betaAngle: betaAngle, interpState: interpState, eclipseEvents: eclipseEvents, expandPattern: expandPattern, parseTle: parseTle, tleState: tleState, sgp4: sgp4, msisDensity: msisDensity, getCr: getCr, parseCr: parseCr,
   ltanFromMatrix: ltanFromMatrix, ltanHours: ltanHours, unwrapHours: unwrapHours, fitLine: fitLine, fmtHms: fmtHms,
   leapInfo: function () { return leap; } };

@@ -29,6 +29,6 @@ export function parsePlanCsv(text) {
     cfg.sats.forEach(function (sc) { if (sc.name === s.name) s.satCfg = sc; });
   });
   var burns = {}; cfg.sats.forEach(function (sc, k) { burns[sc.name] = cfg.burns[k].map(function (b) { return b.t; }); });
-  return { meta: meta, tt0: cfg.epoch.tt, drag: cfg.drag, srp: cfg.srp, burns: burns, parent: { shape: P.shape, radius: P.radius, flattening: P.flattening, mu: P.mu, omega: P.omega, frame: P.frame },
+  return { meta: meta, tt0: cfg.epoch.tt, drag: cfg.drag, srp: cfg.srp, atmosphere: cfg.atmosphere, spaceWeather: cfg.spaceWeather, burns: burns, parent: { shape: P.shape, radius: P.radius, flattening: P.flattening, mu: P.mu, omega: P.omega, frame: P.frame },
     poleRa: +meta.parent_pole_ra_deg * D2R, poleDec: +meta.parent_pole_dec_deg * D2R, times: Float64Array.from(times), rot: Float64Array.from(rot), sats: sats };
 }

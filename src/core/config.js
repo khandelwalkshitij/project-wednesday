@@ -5,7 +5,8 @@ import { kepToState, stateToKep } from './elements.js';
 import { geoHeight } from './environment.js';
 import { makeParent } from './parent.js';
 import { expandPattern } from './patterns.js';
-import { parseDuration, parseEpoch } from './time.js';
+import { spaceWeatherNotes } from './space-weather.js';
+import { parseDuration, parseEpoch, utcNominal } from './time.js';
 import { parseTle, tleState } from './tle.js';
 
 // ---------------------------------------------------------------- config validation (SIM_055 and all INPUT rows)
@@ -75,11 +76,11 @@ export function normalizeConfig(raw) {
   else { keys(ig, ['type', 'time_step_s'], 'integrator'); c.integrator = 'rk4'; c.dt = num(ig, 'time_step_s', 'integrator', { gt: 0 }); }
   c.outStep = num(raw, 'output_step_s', '', { gt: 0 });
   // forces (SIM_026, SIM_093)
-  c.drag = false; c.srp = false; c.thirdBody = false; var fm = raw.force_model;
+  c.drag = false; c.srp = false; c.thirdBody = false; c.atmosphere = 'exponential'; c.spaceWeather = null; var fm = raw.force_model;
   if (fm !== undefined && fm !== 'gravity_only') {
     if (!isObj(fm)) E.push('force_model: must be "gravity_only" or an object such as {"drag": true, "srp": true}');
     else {
-      keys(fm, ['drag', 'srp', 'solar_drag', 'third_body'], 'force_model');
+      keys(fm, ['drag', 'srp', 'solar_drag', 'third_body', 'atmosphere', 'space_weather'], 'force_model');
       if (fm.third_body !== undefined && typeof fm.third_body !== 'boolean') E.push('force_model.third_body: must be true or false');
       if (fm.drag !== undefined && typeof fm.drag !== 'boolean') E.push('force_model.drag: must be true or false');
       if (fm.srp !== undefined && typeof fm.srp !== 'boolean') E.push('force_model.srp: must be true or false');
@@ -89,6 +90,22 @@ export function normalizeConfig(raw) {
       if (c.drag && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.drag: only available for parent.shape "earth_default"');
       if (c.srp && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.srp: only available for parent.shape "earth_default"');
       if (c.thirdBody && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.third_body: only available for parent.shape "earth_default"');
+      if (fm.atmosphere !== undefined) {           // atmosphere model for drag (SIM_060-style choice; NRLMSISE-00 with SIM_061 space weather)
+        if (fm.atmosphere !== 'exponential' && fm.atmosphere !== 'nrlmsise00') E.push('force_model.atmosphere: must be "exponential" or "nrlmsise00"');
+        else if (!c.drag) E.push('force_model.atmosphere: only used with "drag": true');
+        else c.atmosphere = fm.atmosphere;
+      }
+      if (fm.space_weather !== undefined) {
+        if (!isObj(fm.space_weather)) E.push('force_model.space_weather: must be an object such as {"f107": 150, "f107a": 150, "ap": 15}');
+        else if (fm.atmosphere !== 'nrlmsise00') E.push('force_model.space_weather: only used with "atmosphere": "nrlmsise00"');
+        else {
+          var sw = fm.space_weather, ov = {}; keys(sw, ['f107', 'f107a', 'ap'], 'force_model.space_weather');
+          if (sw.f107 !== undefined) ov.f107 = num(sw, 'f107', 'force_model.space_weather', { gt: 0, max: 1000 });
+          if (sw.f107a !== undefined) ov.f107a = num(sw, 'f107a', 'force_model.space_weather', { gt: 0, max: 1000 });
+          if (sw.ap !== undefined) ov.ap = num(sw, 'ap', 'force_model.space_weather', { min: 0, max: 400 });
+          c.spaceWeather = ov;
+        }
+      }
     }
   }
   // satellites
@@ -209,6 +226,7 @@ export function normalizeConfig(raw) {
     var nSteps = c.integrator === 'rk4' ? Math.ceil(c.duration / c.dt - 1e-9) : 0, nOut = Math.floor(c.duration / c.outStep + 1e-9) + 1;
     if (nOut * c.sats.length > LIMITS.maxRows) E.push('output_step_s: run would write ' + nOut * c.sats.length + ' rows (limit ' + LIMITS.maxRows + '). Increase output_step_s or shorten the run');
     if (nSteps * c.sats.length > LIMITS.maxSatSteps) E.push('integrator.time_step_s: run needs ' + nSteps * c.sats.length + ' satellite-steps (limit ' + LIMITS.maxSatSteps + '). Increase the step or shorten the run');
+    if (c.atmosphere === 'nrlmsise00' && c.epoch && c.duration > 0) spaceWeatherNotes(utcNominal(c.epoch.tt), utcNominal(c.epoch.tt + c.duration), c.spaceWeather).forEach(function (w) { W.push(w); });
     c.nSteps = nSteps; c.nOut = nOut; c.warnings = W;
   }
   if (E.length) throw new ConfigError(E);
