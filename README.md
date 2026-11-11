@@ -12,12 +12,13 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Integrators:** fixed-step RK4 (output rows Hermite-interpolated), or adaptive DOP853 with rtol/atol step control and 7th-order dense output. DOP853 steps land on burns and shadow boundaries. Either way the output step is independent of the integration step.
 - **Drag:** exponential atmosphere (Vallado's table), co-rotating air, re-entry declared at 80 km. No solar activity.
 - **Solar radiation pressure:** cannonball model, 4.56e-6 N/m² at 1 AU scaled by 1/r², switched off in a cylindrical Earth shadow. Cr can be a constant or a time schedule.
+- **Sun and Moon gravity:** point masses, Moon from the Meeus series as in ERFA `eraMoon98`, Sun from a low-precision analytic formula. Optional (`force_model.third_body`).
 - **Burns:** impulsive, in LVLH (radial, along-track, cross-track) or inertial axes, applied at the exact commanded time.
 - **Inputs:** Keplerian or Cartesian states, TLEs (initial state from SGP4/SDP4, then propagated with this force model), Walker and train patterns.
 - **Checks:** energy residual after removing drag work, SRP work and burn energy, so the report shows pure numerical error. Jacobi integral for a uniform sphere.
 - **Outputs:** `plan.csv` ephemeris, LTAN, altitude, beta angle, eclipse and inter-satellite range charts, each exportable as CSV.
 
-Not modelled: tesseral harmonics, Sun and Moon gravity, penumbra, attitude. See `docs/` for the full requirement list and status.
+Not modelled: tesseral harmonics, JPL-grade ephemerides, penumbra, attitude. See `docs/` for the full requirement list and status.
 
 ## Layout
 
@@ -28,13 +29,14 @@ src/main.js              entry point: runs each app module's init() in order
 src/core/                physics, no DOM. Runs in the browser and in Node
   constants, math, time, earth-orientation, elements, environment, parent, sun,
   interp, patterns, tle, cr-schedule, config, propagator, plan-csv, ltan, index
-src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients
+src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients, Moon series
 src/app/                 page logic: boot, presets, form, run, report, infotip, start
 src/viewer/              three.js globe, Mercator map, charts, docs tab, playback loop
 scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
 src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
 tests/core/              Node tests for the physics (ERFA, SGP4, SciPy DOP853 and independent-integrator checks)
+tools/gen_moon98.py      regenerates the Moon series from ERFA moon98.c and its pyerfa test truth
 tools/gen_dop853.py      regenerates the DOP853 coefficient table and its SciPy test truth
 tests/browser/           Playwright smoke test of both builds
 tools/gen_tables.py      regenerates the ERFA-derived tables and test truth
@@ -94,4 +96,4 @@ npm install
 
 ## Licence
 
-MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). SGP4/SDP4 from satellite.js 6.0.2 (MIT, see `src/vendor/sgp4.js`). Nutation and TDB coefficients from ERFA (BSD-style licence, derived from IAU SOFA).
+MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). SGP4/SDP4 from satellite.js 6.0.2 (MIT, see `src/vendor/sgp4.js`). Nutation, TDB and Moon series coefficients from ERFA (BSD-style licence, derived from IAU SOFA).

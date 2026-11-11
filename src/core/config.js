@@ -75,18 +75,20 @@ export function normalizeConfig(raw) {
   else { keys(ig, ['type', 'time_step_s'], 'integrator'); c.integrator = 'rk4'; c.dt = num(ig, 'time_step_s', 'integrator', { gt: 0 }); }
   c.outStep = num(raw, 'output_step_s', '', { gt: 0 });
   // forces (SIM_026, SIM_093)
-  c.drag = false; c.srp = false; var fm = raw.force_model;
+  c.drag = false; c.srp = false; c.thirdBody = false; var fm = raw.force_model;
   if (fm !== undefined && fm !== 'gravity_only') {
     if (!isObj(fm)) E.push('force_model: must be "gravity_only" or an object such as {"drag": true, "srp": true}');
     else {
-      keys(fm, ['drag', 'srp', 'solar_drag'], 'force_model');
+      keys(fm, ['drag', 'srp', 'solar_drag', 'third_body'], 'force_model');
+      if (fm.third_body !== undefined && typeof fm.third_body !== 'boolean') E.push('force_model.third_body: must be true or false');
       if (fm.drag !== undefined && typeof fm.drag !== 'boolean') E.push('force_model.drag: must be true or false');
       if (fm.srp !== undefined && typeof fm.srp !== 'boolean') E.push('force_model.srp: must be true or false');
       if (fm.solar_drag !== undefined && typeof fm.solar_drag !== 'boolean') E.push('force_model.solar_drag: must be true or false');
       c.drag = fm.drag === true;
-      c.srp = fm.srp === true || fm.solar_drag === true;
+      c.srp = fm.srp === true || fm.solar_drag === true; c.thirdBody = fm.third_body === true;
       if (c.drag && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.drag: only available for parent.shape "earth_default"');
       if (c.srp && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.srp: only available for parent.shape "earth_default"');
+      if (c.thirdBody && c.parent && c.parent.shape !== 'earth_default') E.push('force_model.third_body: only available for parent.shape "earth_default"');
     }
   }
   // satellites

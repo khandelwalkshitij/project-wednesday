@@ -1,6 +1,6 @@
 // Propagation with drag, SRP, burns, impacts and re-entry: fixed-step RK4 or adaptive DOP853. Writes plan.csv.
 import { REENTRY_ALT, normalizeConfig } from './config.js';
-import { EARTH, LIMITS, R2D, TWO_PI, VERSION } from './constants.js';
+import { AU, EARTH, GM_MOON, GM_SUN, LIMITS, R2D, TWO_PI, VERSION } from './constants.js';
 import { getCr } from './cr-schedule.js';
 import { Dop853 } from './dop853.js';
 import { earthRotation, poleRaDec, primeMeridianAngle } from './earth-orientation.js';
@@ -9,6 +9,7 @@ import { ATMO, atmosphereDensity, geoHeight, geodetic } from './environment.js';
 import { hermite } from './interp.js';
 import { fitLine, fmtHms, ltanFromMatrix, unwrapHours } from './ltan.js';
 import { crc32, mvec } from './math.js';
+import { moonPosition } from './moon.js';
 import { makeParent } from './parent.js';
 import { inShadow, sunDirection, sunDistanceAu } from './sun.js';
 import { formatUtc, leap } from './time.js';
@@ -23,7 +24,7 @@ export var COLUMNS = [['sat_name', '-', '-'], ['epoch_utc', 'ISO 8601, UTC', '-'
 export function fmtT(t) { return String(Math.round(t * 1e6) / 1e6); }
 
 export function* simulate(rawConfig) {
-  var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === 'earth_default', drag = c.drag, srp = c.srp, P_SRP = 4.560e-6;
+  var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === 'earth_default', drag = c.drag, srp = c.srp, tb3 = c.thirdBody && isE, P_SRP = 4.560e-6;
   var F = function (n) { return new Float64Array(n); };
   var y = F(6 * N), yn = F(6 * N), f0 = F(6 * N), f1 = F(6 * N), k2 = F(6), k3 = F(6), k4 = F(6), tmp = F(6), pw0 = F(N), pw1 = F(N), W = F(N), EB = F(N), JB = F(N), dvT = F(N);
   var bc = c.sats.map(function (s) { return drag ? 0.5 * s.cd * s.area / s.mass : 0; }), bi = new Int32Array(N), segList = new Array(N), impS = new Array(N);
@@ -36,6 +37,15 @@ export function* simulate(rawConfig) {
     var x = s[so], yy = s[so + 1], z = s[so + 2], vx = s[so + 3], vy = s[so + 4], vz = s[so + 5];
     out[oo] = vx; out[oo + 1] = vy; out[oo + 2] = vz; P.accel(x, yy, z, p, out, oo + 3);
     var pwr = 0;
+    if (tb3) {           // Sun and Moon as point masses: direct pull on the satellite minus their pull on the Earth
+      var q = bodiesAt(t), tax = 0, tay = 0, taz = 0;
+      for (var bo = 0; bo < 6; bo += 3) {
+        var gm = bo ? GM_MOON : GM_SUN, bx = q[bo], by = q[bo + 1], bz = q[bo + 2], dx = bx - x, dy = by - yy, dz = bz - z;
+        var dd = dx * dx + dy * dy + dz * dz, d3 = dd * Math.sqrt(dd), rr = bx * bx + by * by + bz * bz, r3 = rr * Math.sqrt(rr);
+        tax += gm * (dx / d3 - bx / r3); tay += gm * (dy / d3 - by / r3); taz += gm * (dz / d3 - bz / r3);
+      }
+      out[oo + 3] += tax; out[oo + 4] += tay; out[oo + 5] += taz; pwr += tax * vx + tay * vy + taz * vz;
+    }
     if (b) {
       var zz = x * p[0] + yy * p[1] + z * p[2], hgt = geoHeight(Math.sqrt(Math.max(0, x * x + yy * yy + z * z - zz * zz)), zz);
       if (hgt <= 1.5e6) {
@@ -94,7 +104,17 @@ export function* simulate(rawConfig) {
 
   // ---------------------------------------------------------------- adaptive DOP853 (SIM_017). Satellites do not interact, so each gets its own
   // step sequence; rows come from the 7th-order dense output and are written in the same time order as the RK4 path.
-  var POLE_DT = 60, poleTab = null;
+  var POLE_DT = 60, poleTab = null, BODY_DT = 60, bodyTab = null, bodyOut = F(6);
+  function bodiesAt(t) {     // Sun and Moon GCRF positions [m] on a 60 s grid, linearly interpolated (Moon ~1 m, Sun ~3 m off; both far below the models' own error)
+    var u = t / BODY_DT, j = Math.max(0, Math.floor(u)), s = u - j, q, k;
+    if (!bodyTab) { bodyTab = F(6 * (Math.ceil(c.duration / BODY_DT) + 3)); bodyTab.fill(NaN); }
+    for (q = j; q <= j + 1; q++) if (isNaN(bodyTab[6 * q])) {
+      var tq = tt0 + q * BODY_DT, sd = sunDirection(tq), au = sunDistanceAu(tq) * AU, m = moonPosition(tq);
+      bodyTab[6 * q] = sd[0] * au; bodyTab[6 * q + 1] = sd[1] * au; bodyTab[6 * q + 2] = sd[2] * au; bodyTab[6 * q + 3] = m[0]; bodyTab[6 * q + 4] = m[1]; bodyTab[6 * q + 5] = m[2];
+    }
+    for (k = 0; k < 6; k++) bodyOut[k] = bodyTab[6 * j + k] + s * (bodyTab[6 * j + 6 + k] - bodyTab[6 * j + k]);
+    return bodyOut;
+  }
   function poleFast(t) {        // parent pole on a 60 s grid, linearly interpolated (error ~1e-14 rad for Earth); poleAt at all 12 stages would dominate the run time
     var u = t / POLE_DT, j = Math.max(0, Math.floor(u)), s = u - j, a = 3 * j, q;
     if (!poleTab) { poleTab = F(3 * (Math.ceil(c.duration / POLE_DT) + 3)); poleTab.fill(NaN); }
@@ -256,7 +276,7 @@ export function* simulate(rawConfig) {
   H.push('# body_fixed_frame: ' + P.bodyFrame);
   H.push('# integrator: ' + (aStats ? 'dop853; rtol=' + c.rtol + '; atol=' + c.atol + (c.maxStep < Infinity ? '; max_step_s=' + c.maxStep : '') + '; accepted_steps=' + aStats.steps + '; rejected_steps=' + aStats.rejected + '; shadow_events=' + aStats.events +
     (aStats.hMax > 0 ? '; step_s_min=' + (aStats.hMin < Infinity ? aStats.hMin : aStats.hMax).toPrecision(4) + '; step_s_max=' + aStats.hMax.toPrecision(4) : '') : 'rk4; time_step_s=' + h));
-  var fmArr = ['gravity']; if (drag) fmArr.push('drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); H.push('# force_model: ' + fmArr.join(' + '));
+  var fmArr = ['gravity']; if (drag) fmArr.push('drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); if (tb3) fmArr.push('Sun and Moon point-mass gravity (Moon: Meeus/ERFA moon98; Sun: low-precision analytic)'); H.push('# force_model: ' + fmArr.join(' + '));
   H.push('# parent_pole_ra_deg: ' + (rd[0] * R2D).toFixed(9));
   H.push('# parent_pole_dec_deg: ' + (rd[1] * R2D).toFixed(9));
   H.push('# data_file: name=' + leap.name + '; version=' + leap.version + '; crc32=' + leap.checksum + '; source=' + leap.source);
@@ -266,7 +286,7 @@ export function* simulate(rawConfig) {
   var hasJ = P.shape === 'sphere_uniform';   // Earth's pole moves (precession-nutation), so only inertial energy is conserved there
   var report = c.sats.map(function (sat, i) {
     var L = LT[i], ok = isE && L.h.length > 1, fit = ok ? fitLine(L.t, L.h) : null, sm = summary[i];
-    return { name: sat.name, energyDrift: dE[i], jacobiDrift: hasJ ? dJ[i] : null, impact: null, dragWork: drag && !srp ? W[i] : null, nonGravWork: drag || srp ? W[i] : null, burnEnergy: EB[i], dvTotal: dvT[i], burns: c.burns[i].length,
+    return { name: sat.name, energyDrift: dE[i], jacobiDrift: hasJ ? dJ[i] : null, impact: null, dragWork: drag && !srp && !tb3 ? W[i] : null, nonGravWork: (drag || srp) && !tb3 ? W[i] : null, perturbationWork: tb3 ? W[i] : null, burnEnergy: EB[i], dvTotal: dvT[i], burns: c.burns[i].length,
       period: sm ? sm.period : null, perigeeAlt: sm ? sm.hp : null, apogeeAlt: sm ? sm.ha : null,
       ltanStart: ok ? L.h[0] : null, ltanEnd: ok ? L.h[L.h.length - 1] : null, ltanDrift: ok ? fit[0] * 60 * 86400 : null };
   });
@@ -274,7 +294,7 @@ export function* simulate(rawConfig) {
   report.forEach(function (r) {
     H.push('# report: sat=' + r.name + '; energy_rel_drift=' + r.energyDrift.toExponential(3) + (hasJ ? '; jacobi_rel_drift=' + r.jacobiDrift.toExponential(3) : '') +
       (r.period !== null ? '; period_s=' + r.period.toFixed(3) + '; perigee_alt_m=' + r.perigeeAlt.toFixed(1) + '; apogee_alt_m=' + r.apogeeAlt.toFixed(1) : '') +
-      (drag && !srp ? '; drag_work_j_per_kg=' + r.dragWork.toExponential(6) : '') + (srp ? '; nongrav_work_j_per_kg=' + r.nonGravWork.toExponential(6) : '') + (r.burns ? '; burns=' + r.burns + '; dv_total_m_s=' + r.dvTotal.toFixed(6) : '') +
+      (r.dragWork !== null ? '; drag_work_j_per_kg=' + r.dragWork.toExponential(6) : '') + (srp && !tb3 ? '; nongrav_work_j_per_kg=' + r.nonGravWork.toExponential(6) : '') + (tb3 ? '; perturbation_work_j_per_kg=' + r.perturbationWork.toExponential(6) : '') + (r.burns ? '; burns=' + r.burns + '; dv_total_m_s=' + r.dvTotal.toFixed(6) : '') +
       (r.ltanStart !== null ? '; ltan_start=' + fmtHms(r.ltanStart) + '; ltan_end=' + fmtHms(r.ltanEnd) + '; ltan_drift_min_per_day=' + r.ltanDrift.toFixed(4) : ''));
     if (r.impact) H.push('# impact: sat=' + r.name + '; kind=' + r.impact.kind + '; epoch_utc=' + r.impact.epoch + '; t_s=' + r.impact.t.toFixed(3) + '; body_fixed_m=' + r.impact.bodyFixed.map(function (v) { return v.toFixed(3); }).join(' ') +
       '; lat_deg=' + r.impact.latDeg.toFixed(5) + '; lon_deg=' + r.impact.lonDeg.toFixed(5));

@@ -287,7 +287,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
           <dt>satellites</dt><dd><code>count</code> (1 to 100), <code>mass_kg</code> (up to 10000), <code>names</code> (list) or <code>name_prefix</code>, and <code>orbits</code>: one entry per satellite.</dd>
           <dt>orbits[ ]</dt><dd><code>{"type": "keplerian", "a_m", "e", "i_deg", "raan_deg", "argp_deg", "ta_deg"}</code> (osculating, inertial frame) or <code>{"type": "cartesian", "r_m": [x, y, z], "v_m_s": [vx, vy, vz]}</code>.</dd>
           <dt>earth_orientation.dut1_s</dt><dd>Optional UT1 minus UTC in seconds for Earth. Default 0.</dd>
-          <dt>force_model</dt><dd><code>{"drag": true, "srp": true}</code> turns on atmospheric drag and/or solar radiation pressure for Earth (<code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>). Needs <code>satellites.area_m2</code>; <code>satellites.cd</code> defaults to 2.2, <code>satellites.cr</code> defaults to 1.8. Each orbit entry may override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>.</dd>
+          <dt>force_model</dt><dd><code>{"drag": true, "srp": true}</code> turns on atmospheric drag and/or solar radiation pressure for Earth (<code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>). <code>"third_body": true</code> adds Sun and Moon gravity. Needs <code>satellites.area_m2</code>; <code>satellites.cd</code> defaults to 2.2, <code>satellites.cr</code> defaults to 1.8. Each orbit entry may override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>.</dd>
           <dt>satellites.pattern</dt><dd>Use in place of <code>orbits</code>. <code>{"type": "walker", "a_m", "i_deg", "t", "p", "f"}</code> or <code>{"type": "train", "base": {Keplerian orbit}, "offset": {"along_track_m" | "ta_deg" | "raan_deg"}}</code> with <code>count</code>.</dd>
           <dt>orbits[ ] from a TLE</dt><dd><code>{"type": "tle", "line1": "1 ...", "line2": "2 ..."}</code>. SGP4 gives the state at start_epoch; the simulator's own force model takes it from there.</dd>
           <dt>maneuvers[ ]</dt><dd><code>{"sat": name, "t_s" or "epoch", "dv_m_s": [a, b, c], "frame": "lvlh" | "inertial"}</code>. For lvlh the three numbers are radial, along-track, cross-track.</dd>
@@ -439,6 +439,9 @@ button.mini { min-height: 19px; padding: 0 6px; }
     magPoleLat: 80.7,
     magPoleLon: -72.7
   };
+  var GM_SUN = 132712440041e9;
+  var GM_MOON = 4902800121800;
+  var AU = 149597870700;
   var LIMITS = { maxRows: 15e5, maxSatSteps: 3e8 };
   function ConfigError(list) {
     this.name = "ConfigError";
@@ -745,11 +748,15 @@ button.mini { min-height: 19px; padding: 0 6px; }
   var NUT00B = [[0, 0, 0, 0, 1, -172064161, -174666, 33386, 92052331, 9086, 15377], [0, 0, 2, -2, 2, -13170906, -1675, -13696, 5730336, -3015, -4587], [0, 0, 2, 0, 2, -2276413, -234, 2796, 978459, -485, 1374], [0, 0, 0, 0, 2, 2074554, 207, -698, -897492, 470, -291], [0, 1, 0, 0, 0, 1475877, -3633, 11817, 73871, -184, -1924], [0, 1, 2, -2, 2, -516821, 1226, -524, 224386, -677, -174], [1, 0, 0, 0, 0, 711159, 73, -872, -6750, 0, 358], [0, 0, 2, 0, 1, -387298, -367, 380, 200728, 18, 318], [1, 0, 2, 0, 2, -301461, -36, 816, 129025, -63, 367], [0, -1, 2, -2, 2, 215829, -494, 111, -95929, 299, 132], [0, 0, 2, -2, 1, 128227, 137, 181, -68982, -9, 39], [-1, 0, 2, 0, 2, 123457, 11, 19, -53311, 32, -4], [-1, 0, 0, 2, 0, 156994, 10, -168, -1235, 0, 82], [1, 0, 0, 0, 1, 63110, 63, 27, -33228, 0, -9], [-1, 0, 0, 0, 1, -57976, -63, -189, 31429, 0, -75], [-1, 0, 2, 2, 2, -59641, -11, 149, 25543, -11, 66], [1, 0, 2, 0, 1, -51613, -42, 129, 26366, 0, 78], [-2, 0, 2, 0, 1, 45893, 50, 31, -24236, -10, 20], [0, 0, 0, 2, 0, 63384, 11, -150, -1220, 0, 29], [0, 0, 2, 2, 2, -38571, -1, 158, 16452, -11, 68], [0, -2, 2, -2, 2, 32481, 0, 0, -13870, 0, 0], [-2, 0, 0, 2, 0, -47722, 0, -18, 477, 0, -25], [2, 0, 2, 0, 2, -31046, -1, 131, 13238, -11, 59], [1, 0, 2, -2, 2, 28593, 0, -1, -12338, 10, -3], [-1, 0, 2, 0, 1, 20441, 21, 10, -10758, 0, -3], [2, 0, 0, 0, 0, 29243, 0, -74, -609, 0, 13], [0, 0, 2, 0, 0, 25887, 0, -66, -550, 0, 11], [0, 1, 0, 0, 1, -14053, -25, 79, 8551, -2, -45], [-1, 0, 0, 2, 1, 15164, 10, 11, -8001, 0, -1], [0, 2, 2, -2, 2, -15794, 72, -16, 6850, -42, -5], [0, 0, -2, 2, 0, 21783, 0, 13, -167, 0, 13], [1, 0, 0, -2, 1, -12873, -10, -37, 6953, 0, -14], [0, -1, 0, 0, 1, -12654, 11, 63, 6415, 0, 26], [-1, 0, 2, 2, 1, -10204, 0, 25, 5222, 0, 15], [0, 2, 0, 0, 0, 16707, -85, -10, 168, -1, 10], [1, 0, 2, 2, 2, -7691, 0, 44, 3268, 0, 19], [-2, 0, 2, 0, 0, -11024, 0, -14, 104, 0, 2], [0, 1, 2, 0, 2, 7566, -21, -11, -3250, 0, -5], [0, 0, 2, 2, 1, -6637, -11, 25, 3353, 0, 14], [0, -1, 2, 0, 2, -7141, 21, 8, 3070, 0, 4], [0, 0, 0, 2, 1, -6302, -11, 2, 3272, 0, 4], [1, 0, 2, -2, 1, 5800, 10, 2, -3045, 0, -1], [2, 0, 2, -2, 2, 6443, 0, -7, -2768, 0, -4], [-2, 0, 0, 2, 1, -5774, -11, -15, 3041, 0, -5], [2, 0, 2, 0, 1, -5350, 0, 21, 2695, 0, 12], [0, -1, 2, -2, 1, -4752, -11, -3, 2719, 0, -3], [0, 0, 0, -2, 1, -4940, -11, -21, 2720, 0, -9], [-1, -1, 0, 2, 0, 7350, 0, -8, -51, 0, 4], [2, 0, 0, -2, 1, 4065, 0, 6, -2206, 0, 1], [1, 0, 0, 2, 0, 6579, 0, -24, -199, 0, 2], [0, 1, 2, -2, 1, 3579, 0, 5, -1900, 0, 1], [1, -1, 0, 0, 0, 4725, 0, -6, -41, 0, 3], [-2, 0, 2, 0, 2, -3075, 0, -2, 1313, 0, -1], [3, 0, 2, 0, 2, -2904, 0, 15, 1233, 0, 7], [0, -1, 0, 2, 0, 4348, 0, -10, -81, 0, 2], [1, -1, 2, 0, 2, -2878, 0, 8, 1232, 0, 4], [0, 0, 0, 1, 0, -4230, 0, 5, -20, 0, -2], [-1, -1, 2, 2, 2, -2819, 0, 7, 1207, 0, 3], [-1, 0, 2, 0, 0, -4056, 0, 5, 40, 0, -2], [0, -1, 2, 2, 2, -2647, 0, 11, 1129, 0, 5], [-2, 0, 0, 0, 1, -2294, 0, -10, 1266, 0, -4], [1, 1, 2, 0, 2, 2481, 0, -7, -1062, 0, -3], [2, 0, 0, 0, 1, 2179, 0, -2, -1129, 0, -2], [-1, 1, 0, 1, 0, 3276, 0, 1, -9, 0, 0], [1, 1, 0, 0, 0, -3389, 0, 5, 35, 0, -2], [1, 0, 2, 0, 0, 3339, 0, -13, -107, 0, 1], [-1, 0, 2, -2, 1, -1987, 0, -6, 1073, 0, -2], [1, 0, 0, 0, 2, -1981, 0, 0, 854, 0, 0], [-1, 0, 0, 1, 0, 4026, 0, -353, -553, 0, -139], [0, 0, 2, 1, 2, 1660, 0, -5, -710, 0, -2], [-1, 0, 2, 4, 2, -1521, 0, 9, 647, 0, 4], [-1, 1, 0, 1, 1, 1314, 0, 0, -700, 0, 0], [0, -2, 2, -2, 1, -1283, 0, 0, 672, 0, 0], [1, 0, 2, 2, 1, -1331, 0, 8, 663, 0, 4], [-2, 0, 2, 2, 2, 1383, 0, -2, -594, 0, -2], [-1, 0, 0, 0, 2, 1405, 0, 4, -610, 0, 2], [1, 1, 2, -2, 2, 1290, 0, 0, -556, 0, 0]];
 
   // src/core/earth-orientation.js
+  function fwAngles(t) {
+    return [
+      (-0.052928 + (10.556378 + (0.4932044 + (-31238e-8 + (-2788e-9 + 26e-9 * t) * t) * t) * t) * t) * AS2R,
+      (84381.412819 + (-46.811016 + (0.0511268 + (53289e-8 + (-44e-8 - 176e-10 * t) * t) * t) * t) * t) * AS2R,
+      (-0.041775 + (5038.481484 + (1.5584175 + (-18522e-8 + (-26452e-9 - 148e-10 * t) * t) * t) * t) * t) * AS2R
+    ];
+  }
   function npbMatrix(tt) {
-    var t = tt / (86400 * 36525);
-    var gamb = (-0.052928 + (10.556378 + (0.4932044 + (-31238e-8 + (-2788e-9 + 26e-9 * t) * t) * t) * t) * t) * AS2R;
-    var phib = (84381.412819 + (-46.811016 + (0.0511268 + (53289e-8 + (-44e-8 - 176e-10 * t) * t) * t) * t) * t) * AS2R;
-    var psib = (-0.041775 + (5038.481484 + (1.5584175 + (-18522e-8 + (-26452e-9 - 148e-10 * t) * t) * t) * t) * t) * AS2R;
+    var t = tt / (86400 * 36525), fw = fwAngles(t), gamb = fw[0], phib = fw[1], psib = fw[2];
     var epsa = (84381.406 + (-46.836769 + (-1831e-7 + (20034e-7 + (-576e-9 - 434e-10 * t) * t) * t) * t) * t) * AS2R;
     var el2 = (485868.249036 + 17179159232178e-4 * t) % TURNAS * AS2R, elp = (128710479305e-5 + 1295965810481e-4 * t) % TURNAS * AS2R, f = (335779.526232 + 17395272628478e-4 * t) % TURNAS * AS2R, d = (107226070369e-5 + 1602961601209e-3 * t) % TURNAS * AS2R, om = (450160.398036 - 69628905431e-4 * t) % TURNAS * AS2R;
     var dp = 0, de = 0;
@@ -2684,18 +2691,22 @@ button.mini { min-height: 19px; padding: 0 6px; }
     c.outStep = num(raw, "output_step_s", "", { gt: 0 });
     c.drag = false;
     c.srp = false;
+    c.thirdBody = false;
     var fm = raw.force_model;
     if (fm !== void 0 && fm !== "gravity_only") {
       if (!isObj(fm)) E.push('force_model: must be "gravity_only" or an object such as {"drag": true, "srp": true}');
       else {
-        keys(fm, ["drag", "srp", "solar_drag"], "force_model");
+        keys(fm, ["drag", "srp", "solar_drag", "third_body"], "force_model");
+        if (fm.third_body !== void 0 && typeof fm.third_body !== "boolean") E.push("force_model.third_body: must be true or false");
         if (fm.drag !== void 0 && typeof fm.drag !== "boolean") E.push("force_model.drag: must be true or false");
         if (fm.srp !== void 0 && typeof fm.srp !== "boolean") E.push("force_model.srp: must be true or false");
         if (fm.solar_drag !== void 0 && typeof fm.solar_drag !== "boolean") E.push("force_model.solar_drag: must be true or false");
         c.drag = fm.drag === true;
         c.srp = fm.srp === true || fm.solar_drag === true;
+        c.thirdBody = fm.third_body === true;
         if (c.drag && c.parent && c.parent.shape !== "earth_default") E.push('force_model.drag: only available for parent.shape "earth_default"');
         if (c.srp && c.parent && c.parent.shape !== "earth_default") E.push('force_model.srp: only available for parent.shape "earth_default"');
+        if (c.thirdBody && c.parent && c.parent.shape !== "earth_default") E.push('force_model.third_body: only available for parent.shape "earth_default"');
       }
     }
     var sa = raw.satellites;
@@ -3111,6 +3122,38 @@ button.mini { min-height: 19px; padding: 0 6px; }
     }
   };
 
+  // src/data/moon98-series.js
+  var MOON_LR = [[0, 0, 1, 0, 6.288774, -20905355], [2, 0, -1, 0, 1.274027, -3699111], [2, 0, 0, 0, 0.658314, -2955968], [0, 0, 2, 0, 0.213618, -569925], [0, 1, 0, 0, -0.185116, 48888], [0, 0, 0, 2, -0.114332, -3149], [2, 0, -2, 0, 0.058793, 246158], [2, -1, -1, 0, 0.057066, -152138], [2, 0, 1, 0, 0.053322, -170733], [2, -1, 0, 0, 0.045758, -204586], [0, 1, -1, 0, -0.040923, -129620], [1, 0, 0, 0, -0.03472, 108743], [0, 1, 1, 0, -0.030383, 104755], [2, 0, 0, -2, 0.015327, 10321], [0, 0, 1, 2, -0.012528, 0], [0, 0, 1, -2, 0.01098, 79661], [4, 0, -1, 0, 0.010675, -34782], [0, 0, 3, 0, 0.010034, -23210], [4, 0, -2, 0, 8548e-6, -21636], [2, 1, -1, 0, -7888e-6, 24208], [2, 1, 0, 0, -6766e-6, 30824], [1, 0, -1, 0, -5163e-6, -8379], [1, 1, 0, 0, 4987e-6, -16675], [2, -1, 1, 0, 4036e-6, -12831], [2, 0, 2, 0, 3994e-6, -10445], [4, 0, 0, 0, 3861e-6, -11650], [2, 0, -3, 0, 3665e-6, 14403], [0, 1, -2, 0, -2689e-6, -7003], [2, 0, -1, 2, -2602e-6, 0], [2, -1, -2, 0, 239e-5, 10056], [1, 0, 1, 0, -2348e-6, 6322], [2, -2, 0, 0, 2236e-6, -9884], [0, 1, 2, 0, -212e-5, 5751], [0, 2, 0, 0, -2069e-6, 0], [2, -2, -1, 0, 2048e-6, -4950], [2, 0, 1, -2, -1773e-6, 4130], [2, 0, 0, 2, -1595e-6, 0], [4, -1, -1, 0, 1215e-6, -3958], [0, 0, 2, 2, -111e-5, 0], [3, 0, -1, 0, -892e-6, 3258], [2, 1, 1, 0, -81e-5, 2616], [4, -1, -2, 0, 759e-6, -1897], [0, 2, -1, 0, -713e-6, -2117], [2, 2, -1, 0, -7e-4, 2354], [2, 1, -2, 0, 691e-6, 0], [2, -1, 0, -2, 596e-6, 0], [4, 0, 1, 0, 549e-6, -1423], [0, 0, 4, 0, 537e-6, -1117], [4, -1, 0, 0, 52e-5, -1571], [1, 0, -2, 0, -487e-6, -1739], [2, 1, 0, -2, -399e-6, 0], [0, 0, 2, -2, -381e-6, -4421], [1, 1, 1, 0, 351e-6, 0], [3, 0, -2, 0, -34e-5, 0], [4, 0, -3, 0, 33e-5, 0], [2, -1, 2, 0, 327e-6, 0], [0, 2, 1, 0, -323e-6, 1165], [1, 1, -1, 0, 299e-6, 0], [2, 0, 3, 0, 294e-6, 0], [2, 0, -1, -2, 0, 8752]];
+  var MOON_B = [[0, 0, 0, 1, 5.128122], [0, 0, 1, 1, 0.280602], [0, 0, 1, -1, 0.277693], [2, 0, 0, -1, 0.173237], [2, 0, -1, 1, 0.055413], [2, 0, -1, -1, 0.046271], [2, 0, 0, 1, 0.032573], [0, 0, 2, 1, 0.017198], [2, 0, 1, -1, 9266e-6], [0, 0, 2, -1, 8822e-6], [2, -1, 0, -1, 8216e-6], [2, 0, -2, -1, 4324e-6], [2, 0, 1, 1, 42e-4], [2, 1, 0, -1, -3359e-6], [2, -1, -1, 1, 2463e-6], [2, -1, 0, 1, 2211e-6], [2, -1, -1, -1, 2065e-6], [0, 1, -1, -1, -187e-5], [4, 0, -1, -1, 1828e-6], [0, 1, 0, 1, -1794e-6], [0, 0, 0, 3, -1749e-6], [0, 1, -1, 1, -1565e-6], [1, 0, 0, 1, -1491e-6], [0, 1, 1, 1, -1475e-6], [0, 1, 1, -1, -141e-5], [0, 1, 0, -1, -1344e-6], [1, 0, 0, -1, -1335e-6], [0, 0, 3, 1, 1107e-6], [4, 0, 0, -1, 1021e-6], [4, 0, -1, 1, 833e-6], [0, 0, 1, -3, 777e-6], [4, 0, -2, 1, 671e-6], [2, 0, 0, -3, 607e-6], [2, 0, 2, -1, 596e-6], [2, -1, 1, -1, 491e-6], [2, 0, -2, 1, -451e-6], [0, 0, 3, -1, 439e-6], [2, 0, 2, 1, 422e-6], [2, 0, -3, -1, 421e-6], [2, 1, -1, 1, -366e-6], [2, 1, 0, 1, -351e-6], [4, 0, 0, 1, 331e-6], [2, -1, 1, 1, 315e-6], [2, -2, 0, -1, 302e-6], [0, 0, 1, 3, -283e-6], [2, 1, 1, -1, -229e-6], [1, 1, 0, -1, 223e-6], [1, 1, 0, 1, 223e-6], [0, 1, -2, -1, -22e-5], [2, 1, -1, -1, -22e-5], [1, 0, 1, 1, -185e-6], [2, -1, -2, -1, 181e-6], [0, 1, 2, 1, -177e-6], [4, 0, -2, -1, 176e-6], [4, -1, -1, -1, 166e-6], [1, 0, 1, -1, -164e-6], [4, 0, 1, -1, 132e-6], [1, 0, -1, -1, -119e-6], [4, -1, 0, -1, 115e-6], [2, -2, 0, 1, 107e-6]];
+
+  // src/core/moon.js
+  function deg(c0, c1, c2, c3, c4, t) {
+    return D2R * ((c0 + (c1 + (c2 + (c3 + c4 * t) * t) * t) * t) % 360);
+  }
+  function moonPosition(tt) {
+    var t = tt / (86400 * 36525);
+    var elp = deg(218.31665436, 481267.88123421, -15786e-7, 1 / 538841, -1 / 65194e3, t), d = deg(297.8501921, 445267.1114034, -18819e-7, 1 / 545868, 1 / 113065e3, t), em = deg(357.5291092, 35999.0502909, -1536e-7, 1 / 2449e4, 0, t), emp = deg(134.9633964, 477198.8675055, 87414e-7, 1 / 69699, -1 / 14712e3, t), f = deg(93.272095, 483202.0175233, -36539e-7, 1 / 3526e3, 1 / 86331e4, t);
+    var a1 = D2R * (119.75 + 131.849 * t), a2 = D2R * (53.09 + 479264.29 * t), a3 = D2R * (313.45 + 481266.484 * t), e = 1 + (-2516e-6 - 74e-7 * t) * t, esq = e * e;
+    var vel = 3958e-6 * Math.sin(a1) + 1962e-6 * Math.sin(elp - f) + 318e-6 * Math.sin(a2), vr = 0, n, x, en, arg;
+    var vb = -2235e-6 * Math.sin(elp) + 382e-6 * Math.sin(a3) + 175e-6 * Math.sin(a1 - f) + 175e-6 * Math.sin(a1 + f) + 127e-6 * Math.sin(elp - emp) - 115e-6 * Math.sin(elp + emp);
+    for (n = MOON_LR.length - 1; n >= 0; n--) {
+      x = MOON_LR[n];
+      en = Math.abs(x[1]) === 1 ? e : Math.abs(x[1]) === 2 ? esq : 1;
+      arg = x[0] * d + x[1] * em + x[2] * emp + x[3] * f;
+      vel += x[4] * Math.sin(arg) * en;
+      vr += x[5] * Math.cos(arg) * en;
+    }
+    for (n = MOON_B.length - 1; n >= 0; n--) {
+      x = MOON_B[n];
+      en = Math.abs(x[1]) === 1 ? e : Math.abs(x[1]) === 2 ? esq : 1;
+      arg = x[0] * d + x[1] * em + x[2] * emp + x[3] * f;
+      vb += x[4] * Math.sin(arg) * en;
+    }
+    var el2 = elp + D2R * vel, b = D2R * vb, r = vr + 385000560, cb = Math.cos(b), fw = fwAngles(t);
+    var m = mmul(rotZ(-fw[0]), mmul(rotX(-fw[1]), rotZ(fw[2])));
+    return mvec(m, [r * cb * Math.cos(el2), r * cb * Math.sin(el2), r * Math.sin(b)]);
+  }
+
   // src/core/sun.js
   function sunDirection(tt) {
     var n = tt / 86400, g = (357.528 + 0.9856003 * n) * D2R, lam = (280.46 + 0.9856474 * n + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g) - 1.3972 * n / 36525) * D2R, e = 23.4393 * D2R;
@@ -3189,7 +3232,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
     return String(Math.round(t * 1e6) / 1e6);
   }
   function* simulate(rawConfig) {
-    var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === "earth_default", drag = c.drag, srp = c.srp, P_SRP = 456e-8;
+    var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === "earth_default", drag = c.drag, srp = c.srp, tb3 = c.thirdBody && isE, P_SRP = 456e-8;
     var F = function(n2) {
       return new Float64Array(n2);
     };
@@ -3211,6 +3254,20 @@ button.mini { min-height: 19px; padding: 0 6px; }
       out[oo + 2] = vz;
       P.accel(x, yy, z, p, out, oo + 3);
       var pwr = 0;
+      if (tb3) {
+        var q2 = bodiesAt(t), tax = 0, tay = 0, taz = 0;
+        for (var bo = 0; bo < 6; bo += 3) {
+          var gm = bo ? GM_MOON : GM_SUN, bx = q2[bo], by = q2[bo + 1], bz = q2[bo + 2], dx = bx - x, dy = by - yy, dz = bz - z;
+          var dd = dx * dx + dy * dy + dz * dz, d3 = dd * Math.sqrt(dd), rr = bx * bx + by * by + bz * bz, r3 = rr * Math.sqrt(rr);
+          tax += gm * (dx / d3 - bx / r3);
+          tay += gm * (dy / d3 - by / r3);
+          taz += gm * (dz / d3 - bz / r3);
+        }
+        out[oo + 3] += tax;
+        out[oo + 4] += tay;
+        out[oo + 5] += taz;
+        pwr += tax * vx + tay * vy + taz * vz;
+      }
       if (b) {
         var zz = x * p[0] + yy * p[1] + z * p[2], hgt = geoHeight(Math.sqrt(Math.max(0, x * x + yy * yy + z * z - zz * zz)), zz);
         if (hgt <= 15e5) {
@@ -3295,7 +3352,25 @@ button.mini { min-height: 19px; padding: 0 6px; }
       L.t.push(t);
       L.h.push(v);
     }
-    var POLE_DT = 60, poleTab = null;
+    var POLE_DT = 60, poleTab = null, BODY_DT = 60, bodyTab = null, bodyOut = F(6);
+    function bodiesAt(t) {
+      var u = t / BODY_DT, j = Math.max(0, Math.floor(u)), s2 = u - j, q2, k5;
+      if (!bodyTab) {
+        bodyTab = F(6 * (Math.ceil(c.duration / BODY_DT) + 3));
+        bodyTab.fill(NaN);
+      }
+      for (q2 = j; q2 <= j + 1; q2++) if (isNaN(bodyTab[6 * q2])) {
+        var tq2 = tt0 + q2 * BODY_DT, sd = sunDirection(tq2), au = sunDistanceAu(tq2) * AU, m = moonPosition(tq2);
+        bodyTab[6 * q2] = sd[0] * au;
+        bodyTab[6 * q2 + 1] = sd[1] * au;
+        bodyTab[6 * q2 + 2] = sd[2] * au;
+        bodyTab[6 * q2 + 3] = m[0];
+        bodyTab[6 * q2 + 4] = m[1];
+        bodyTab[6 * q2 + 5] = m[2];
+      }
+      for (k5 = 0; k5 < 6; k5++) bodyOut[k5] = bodyTab[6 * j + k5] + s2 * (bodyTab[6 * j + 6 + k5] - bodyTab[6 * j + k5]);
+      return bodyOut;
+    }
     function poleFast(t) {
       var u = t / POLE_DT, j = Math.max(0, Math.floor(u)), s2 = u - j, a = 3 * j, q2;
       if (!poleTab) {
@@ -3576,6 +3651,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
     var fmArr = ["gravity"];
     if (drag) fmArr.push("drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)");
     if (srp) fmArr.push("solar radiation pressure (cannonball, P=4.56e-6 N/m\xB2 at 1 AU scaled by 1/r\xB2, cylindrical shadow)");
+    if (tb3) fmArr.push("Sun and Moon point-mass gravity (Moon: Meeus/ERFA moon98; Sun: low-precision analytic)");
     H.push("# force_model: " + fmArr.join(" + "));
     H.push("# parent_pole_ra_deg: " + (rd[0] * R2D).toFixed(9));
     H.push("# parent_pole_dec_deg: " + (rd[1] * R2D).toFixed(9));
@@ -3593,8 +3669,9 @@ button.mini { min-height: 19px; padding: 0 6px; }
         energyDrift: dE[i2],
         jacobiDrift: hasJ ? dJ[i2] : null,
         impact: null,
-        dragWork: drag && !srp ? W[i2] : null,
-        nonGravWork: drag || srp ? W[i2] : null,
+        dragWork: drag && !srp && !tb3 ? W[i2] : null,
+        nonGravWork: (drag || srp) && !tb3 ? W[i2] : null,
+        perturbationWork: tb3 ? W[i2] : null,
         burnEnergy: EB[i2],
         dvTotal: dvT[i2],
         burns: c.burns[i2].length,
@@ -3612,7 +3689,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
       })[0].impact = im;
     });
     report.forEach(function(r) {
-      H.push("# report: sat=" + r.name + "; energy_rel_drift=" + r.energyDrift.toExponential(3) + (hasJ ? "; jacobi_rel_drift=" + r.jacobiDrift.toExponential(3) : "") + (r.period !== null ? "; period_s=" + r.period.toFixed(3) + "; perigee_alt_m=" + r.perigeeAlt.toFixed(1) + "; apogee_alt_m=" + r.apogeeAlt.toFixed(1) : "") + (drag && !srp ? "; drag_work_j_per_kg=" + r.dragWork.toExponential(6) : "") + (srp ? "; nongrav_work_j_per_kg=" + r.nonGravWork.toExponential(6) : "") + (r.burns ? "; burns=" + r.burns + "; dv_total_m_s=" + r.dvTotal.toFixed(6) : "") + (r.ltanStart !== null ? "; ltan_start=" + fmtHms(r.ltanStart) + "; ltan_end=" + fmtHms(r.ltanEnd) + "; ltan_drift_min_per_day=" + r.ltanDrift.toFixed(4) : ""));
+      H.push("# report: sat=" + r.name + "; energy_rel_drift=" + r.energyDrift.toExponential(3) + (hasJ ? "; jacobi_rel_drift=" + r.jacobiDrift.toExponential(3) : "") + (r.period !== null ? "; period_s=" + r.period.toFixed(3) + "; perigee_alt_m=" + r.perigeeAlt.toFixed(1) + "; apogee_alt_m=" + r.apogeeAlt.toFixed(1) : "") + (r.dragWork !== null ? "; drag_work_j_per_kg=" + r.dragWork.toExponential(6) : "") + (srp && !tb3 ? "; nongrav_work_j_per_kg=" + r.nonGravWork.toExponential(6) : "") + (tb3 ? "; perturbation_work_j_per_kg=" + r.perturbationWork.toExponential(6) : "") + (r.burns ? "; burns=" + r.burns + "; dv_total_m_s=" + r.dvTotal.toFixed(6) : "") + (r.ltanStart !== null ? "; ltan_start=" + fmtHms(r.ltanStart) + "; ltan_end=" + fmtHms(r.ltanEnd) + "; ltan_drift_min_per_day=" + r.ltanDrift.toFixed(4) : ""));
       if (r.impact) H.push("# impact: sat=" + r.name + "; kind=" + r.impact.kind + "; epoch_utc=" + r.impact.epoch + "; t_s=" + r.impact.t.toFixed(3) + "; body_fixed_m=" + r.impact.bodyFixed.map(function(v) {
         return v.toFixed(3);
       }).join(" ") + "; lat_deg=" + r.impact.latDeg.toFixed(5) + "; lon_deg=" + r.impact.lonDeg.toFixed(5));
@@ -5417,6 +5494,11 @@ button.mini { min-height: 19px; padding: 0 6px; }
       <p style="text-align: center;"><span class="math"><b>a</b><sub>srp</sub> = -P<sub>srp</sub> (1 AU / r<sub>&odot;</sub>)<sup>2</sup> C<sub>r</sub> (A/m) <b>\xFB</b><sub>&odot;</sub></span></p>
       <p>Where the solar radiation pressure <span class="math">P<sub>srp</sub> &asymp; 4.56 &times; 10<sup>-6</sup> N/m&sup2;</span> at 1 AU, scaled by the Earth-Sun distance <span class="math">r<sub>&odot;</sub></span> (about &plusmn;3.4% over a year). This is the cannonball model: a constant area facing the Sun. SRP is switched off inside a cylindrical Earth shadow (no penumbra) and uses the Sun direction from Earth's centre. Time-varying optical properties can be modelled with a <span class="math">C<sub>r</sub></span> schedule in the JSON. <code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>, but SRP is radiation pressure, not drag.</p>
 
+      <h3>Sun and Moon Gravity (<span class="math"><b>a</b><sub>3b</sub></span>)</h3>
+      <p>Active when <code>force_model.third_body = true</code> (Earth only). The Sun and Moon act as point masses. Because the simulation's origin is the Earth's centre, which the Sun and Moon also accelerate, the force on the satellite is their direct pull minus their pull on the Earth:</p>
+      <p style="text-align: center;"><span class="math"><b>a</b><sub>3b</sub> = &Sigma; GM<sub>b</sub> [ (<b>r</b><sub>b</sub> - <b>r</b>) / |<b>r</b><sub>b</sub> - <b>r</b>|<sup>3</sup> - <b>r</b><sub>b</sub> / |<b>r</b><sub>b</sub>|<sup>3</sup> ]</span></p>
+      <p>GM values are from JPL DE440. The Moon's position comes from the Meeus series as implemented in ERFA <code>eraMoon98</code> (about 3" RMS, 6 km). The Sun's comes from the same low-precision analytic formula used for SRP and shadows (about 30", 10,000 km), which is ample for a perturbation this size. Both are read from a 60 s table during a run. In LEO the effect is tens to hundreds of metres a day; in GEO it is the main perturbation, tilting the orbit by roughly 0.75 to 0.95&deg; a year. The work it does is added to the energy bookkeeping, so the run report still shows pure numerical error.</p>
+
       <h2>3. Orbit Metrics & Analytics</h2>
       <table class="doc-table">
         <tr><th>Metric</th><th>Definition & Computation</th></tr>
@@ -5521,6 +5603,9 @@ button.mini { min-height: 19px; padding: 0 6px; }
   </li>
   <li>
     <b>Cartographic Vectors:</b> Continental outlines and shoreline reference polygons are derived from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> public-domain vector datasets.
+  </li>
+  <li>
+    <b>Moon Ephemeris:</b> Lunar series from Meeus, <i>Astronomical Algorithms</i>, as tabulated in <a href="https://github.com/liberfa/erfa" target="_blank" rel="noopener">ERFA</a> (BSD-style licence, derived from IAU SOFA).
   </li>
   <li>
     <b>Graphics Pipeline:</b> 3D globe and celestial rendering powered by <a href="https://threejs.org/" target="_blank" rel="noopener">Three.js</a>, licensed under the MIT License (Copyright &copy; 2010\u20132026 Three.js Authors).
@@ -6094,7 +6179,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
           }
         } else {
           delete c.force_model.drag;
-          if (!c.force_model.srp && !c.force_model.solar_drag) delete c.force_model;
+          if (!Object.keys(c.force_model).length) delete c.force_model;
         }
         commit(true);
       });
@@ -6116,15 +6201,24 @@ button.mini { min-height: 19px; padding: 0 6px; }
         } else {
           delete c.force_model.srp;
           delete c.force_model.solar_drag;
-          if (!c.force_model.drag) delete c.force_model;
+          if (!Object.keys(c.force_model).length) delete c.force_model;
         }
+        commit(true);
+      });
+      var cbTb = mk("input", { type: "checkbox", checked: !!(c.force_model && c.force_model.third_body === true) });
+      cbTb.addEventListener("change", function() {
+        if (!c.force_model || typeof c.force_model !== "object") c.force_model = {};
+        if (cbTb.checked) c.force_model.third_body = true;
+        else delete c.force_model.third_body;
+        if (!Object.keys(c.force_model).length) delete c.force_model;
         commit(true);
       });
       var fkids = [
         mk("label", { cls: "ff inl" }, [cbDrag, mk("span", { text: "Atmospheric drag" })]),
-        mk("label", { cls: "ff inl" }, [cbSrp, mk("span", { text: "Solar radiation pressure (SRP)" })])
+        mk("label", { cls: "ff inl" }, [cbSrp, mk("span", { text: "Solar radiation pressure (SRP)" })]),
+        mk("label", { cls: "ff inl" }, [cbTb, mk("span", { text: "Sun and Moon gravity" })])
       ];
-      formRoot.appendChild(grp("Forces (gravity is always on)", [row(fkids)], "<b>Forces Advice</b><br>\u2022 <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>\u2022 <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>"));
+      formRoot.appendChild(grp("Forces (gravity is always on)", [row(fkids)], "<b>Forces Advice</b><br>\u2022 <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>\u2022 <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br>\u2022 <b>Sun and Moon gravity</b>: third-body pull of the Sun and Moon as point masses. Tens to hundreds of metres a day in LEO; the main perturbation in GEO (inclination grows about 0.75 to 0.95\xB0 a year).<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>"));
     }
     var mode = sa.pattern && typeof sa.pattern === "object" ? sa.pattern.type === "train" ? "train" : "walker" : "list";
     var topRowItems = [];

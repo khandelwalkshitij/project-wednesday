@@ -160,7 +160,7 @@ export function renderForm() {
         }
       } else {
         delete c.force_model.drag;
-        if (!c.force_model.srp && !c.force_model.solar_drag) delete c.force_model;
+        if (!Object.keys(c.force_model).length) delete c.force_model;
       }
       commit(true);
     });
@@ -182,15 +182,23 @@ export function renderForm() {
       } else {
         delete c.force_model.srp;
         delete c.force_model.solar_drag;
-        if (!c.force_model.drag) delete c.force_model;
+        if (!Object.keys(c.force_model).length) delete c.force_model;
       }
+      commit(true);
+    });
+    var cbTb = mk('input', { type: 'checkbox', checked: !!(c.force_model && c.force_model.third_body === true) });
+    cbTb.addEventListener('change', function () {
+      if (!c.force_model || typeof c.force_model !== 'object') c.force_model = {};
+      if (cbTb.checked) c.force_model.third_body = true; else delete c.force_model.third_body;
+      if (!Object.keys(c.force_model).length) delete c.force_model;
       commit(true);
     });
     var fkids = [
       mk('label', { cls: 'ff inl' }, [cbDrag, mk('span', { text: 'Atmospheric drag' })]),
-      mk('label', { cls: 'ff inl' }, [cbSrp, mk('span', { text: 'Solar radiation pressure (SRP)' })])
+      mk('label', { cls: 'ff inl' }, [cbSrp, mk('span', { text: 'Solar radiation pressure (SRP)' })]),
+      mk('label', { cls: 'ff inl' }, [cbTb, mk('span', { text: 'Sun and Moon gravity' })])
     ];
-    formRoot.appendChild(grp('Forces (gravity is always on)', [row(fkids)], '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
+    formRoot.appendChild(grp('Forces (gravity is always on)', [row(fkids)], '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br>• <b>Sun and Moon gravity</b>: third-body pull of the Sun and Moon as point masses. Tens to hundreds of metres a day in LEO; the main perturbation in GEO (inclination grows about 0.75 to 0.95° a year).<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
   }
   // satellites
   var mode = sa.pattern && typeof sa.pattern === 'object' ? (sa.pattern.type === 'train' ? 'train' : 'walker') : 'list';

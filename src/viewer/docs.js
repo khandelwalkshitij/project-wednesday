@@ -37,6 +37,11 @@ export function init() {
       <p style="text-align: center;"><span class="math"><b>a</b><sub>srp</sub> = -P<sub>srp</sub> (1 AU / r<sub>&odot;</sub>)<sup>2</sup> C<sub>r</sub> (A/m) <b>û</b><sub>&odot;</sub></span></p>
       <p>Where the solar radiation pressure <span class="math">P<sub>srp</sub> &asymp; 4.56 &times; 10<sup>-6</sup> N/m&sup2;</span> at 1 AU, scaled by the Earth-Sun distance <span class="math">r<sub>&odot;</sub></span> (about &plusmn;3.4% over a year). This is the cannonball model: a constant area facing the Sun. SRP is switched off inside a cylindrical Earth shadow (no penumbra) and uses the Sun direction from Earth's centre. Time-varying optical properties can be modelled with a <span class="math">C<sub>r</sub></span> schedule in the JSON. <code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>, but SRP is radiation pressure, not drag.</p>
 
+      <h3>Sun and Moon Gravity (<span class="math"><b>a</b><sub>3b</sub></span>)</h3>
+      <p>Active when <code>force_model.third_body = true</code> (Earth only). The Sun and Moon act as point masses. Because the simulation's origin is the Earth's centre, which the Sun and Moon also accelerate, the force on the satellite is their direct pull minus their pull on the Earth:</p>
+      <p style="text-align: center;"><span class="math"><b>a</b><sub>3b</sub> = &Sigma; GM<sub>b</sub> [ (<b>r</b><sub>b</sub> - <b>r</b>) / |<b>r</b><sub>b</sub> - <b>r</b>|<sup>3</sup> - <b>r</b><sub>b</sub> / |<b>r</b><sub>b</sub>|<sup>3</sup> ]</span></p>
+      <p>GM values are from JPL DE440. The Moon's position comes from the Meeus series as implemented in ERFA <code>eraMoon98</code> (about 3" RMS, 6 km). The Sun's comes from the same low-precision analytic formula used for SRP and shadows (about 30", 10,000 km), which is ample for a perturbation this size. Both are read from a 60 s table during a run. In LEO the effect is tens to hundreds of metres a day; in GEO it is the main perturbation, tilting the orbit by roughly 0.75 to 0.95&deg; a year. The work it does is added to the energy bookkeeping, so the run report still shows pure numerical error.</p>
+
       <h2>3. Orbit Metrics & Analytics</h2>
       <table class="doc-table">
         <tr><th>Metric</th><th>Definition & Computation</th></tr>
@@ -141,6 +146,9 @@ export function init() {
   </li>
   <li>
     <b>Cartographic Vectors:</b> Continental outlines and shoreline reference polygons are derived from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> public-domain vector datasets.
+  </li>
+  <li>
+    <b>Moon Ephemeris:</b> Lunar series from Meeus, <i>Astronomical Algorithms</i>, as tabulated in <a href="https://github.com/liberfa/erfa" target="_blank" rel="noopener">ERFA</a> (BSD-style licence, derived from IAU SOFA).
   </li>
   <li>
     <b>Graphics Pipeline:</b> 3D globe and celestial rendering powered by <a href="https://threejs.org/" target="_blank" rel="noopener">Three.js</a>, licensed under the MIT License (Copyright &copy; 2010–2026 Three.js Authors).
