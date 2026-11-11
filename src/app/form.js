@@ -1,7 +1,7 @@
 // Setup form. It edits the JSON config, which stays the single source of truth. Includes the TLE import dialog.
 import { S } from './boot.js';
 import { $ } from './dom.js';
-import { RE } from './presets.js';
+import { RE } from './presets-data.js';
 import { showErrors } from './run.js';
 
 export var formCfg = null, formRoot;
