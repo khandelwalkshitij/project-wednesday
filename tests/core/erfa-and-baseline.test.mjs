@@ -53,7 +53,7 @@ const rows = csv => csv.split('\n').filter(l => l && l[0] !== '#').slice(1).map(
     (() => { const c = clone(earthCfg); delete c.duration; c.end_epoch = '2026-11-11T06:30:00.000 UTC'; return S.normalizeConfig(c).duration === 86400; })());
   check('SIM_021', 'orbit list length != N rejected', bad(c => c.satellites.count = 2, /orbits: must be a list of 2/));
   check('SIM_014', 'epoch without time scale rejected', bad(c => c.start_epoch = '2026-11-10T06:30:00.000', /SCALE/));
-  check('SIM_016', 'non-baseline integrator rejected', bad(c => c.integrator.type = 'dop853', /not part of this build/)); }
+  check('SIM_016', 'unknown integrator type rejected', bad(c => c.integrator.type = 'rk45', /must be "rk4" or "dop853"/)); }
 // SIM_014 / SIM_060 / SIM_067 vs ERFA
 { let wt = 0, wm = 0, wd = 0, datOk = true;
   for (const T of truth) {

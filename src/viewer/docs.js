@@ -20,7 +20,8 @@ export function init() {
       <p><b>Time Scales:</b> The simulator's internal integrator ticks in Terrestrial Time (TT) seconds past J2000.0. User inputs supporting UTC, TAI, TT, GPS, or TDB are converted rigorously. The system bundles the standard IERS Bulletin C leap-second schedule to compute TT = UTC + <span class="math">&Delta;AT</span> + 32.184s.</p>
 
       <h2>2. Physics & Propagation (Runge-Kutta 4)</h2>
-      <p>The core uses a standard, fixed-step 4th-order Runge-Kutta (RK4) numerical integrator. The force model can be represented by the specific acceleration vector:</p>
+      <p>Two integrators are available. <b>RK4</b> (<code>"type": "rk4"</code>) is the classic fixed-step 4th-order Runge-Kutta method; output rows between steps come from cubic Hermite interpolation. <b>DOP853</b> (<code>"type": "dop853"</code>) is the Dormand&ndash;Prince 8(5,3) method with adaptive step size: each step is sized so its estimated error stays within <code>rtol</code> &times; |value| + <code>atol</code>, and output rows come from its 7th-order dense output. Steps land exactly on burn times and, with SRP on, on every shadow entry and exit, so the switch in solar pressure never falls inside a step. At rtol 1e-10 a day in LEO takes about 450 steps instead of RK4's 8,640 at 10 s, and is more accurate.</p>
+      <p>The force model can be represented by the specific acceleration vector:</p>
       <p style="text-align: center;"><span class="math"><b>a</b> = <b>a</b><sub>grav</sub> + <b>a</b><sub>drag</sub> + <b>a</b><sub>srp</sub></span></p>
       
       <h3>Gravity (<span class="math"><b>a</b><sub>grav</sub></span>)</h3>

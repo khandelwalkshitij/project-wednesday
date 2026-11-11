@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adaptive integrator (SIM_017): `{"type": "dop853", "rtol": 1e-10, "atol": 1e-6}`, with optional `max_step_s` and `initial_step_s`. Dormand-Prince 8(5,3) with SciPy's step control and 7th-order dense output for the rows. Coefficients generated from SciPy by `tools/gen_dop853.py`. Steps land exactly on burns, and with SRP on, on every shadow entry and exit, with the lit/shadow state held fixed within a step, so runs keep converging as rtol is tightened. A day in LEO at rtol 1e-10 takes about 450 steps (RK4 at 10 s: 8,640), and its 1e-10 and 1e-12 runs agree to 4 mm. plan.csv now has an `# integrator:` header line for both integrators. The setup form has an integrator selector.
 - TLE orbits use real SGP4/SDP4 for the state at start_epoch, ported from satellite.js 6.0.2 (MIT) into `src/vendor/sgp4.js`, with no runtime dependency. Matches SGP4 with ERFA to under 1 m, where the old J2 approximation was 8 to 56 km out. Tests include Vallado's verification vectors.
 
 ## 0.3.0

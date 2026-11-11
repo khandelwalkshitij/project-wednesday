@@ -65,10 +65,14 @@ export function normalizeConfig(raw) {
     else if (c.epoch) { c.duration = parseEpoch(raw.end_epoch, 'end_epoch').tt - c.epoch.tt; if (!(c.duration > 0)) E.push('end_epoch: must be after start_epoch'); }
   } catch (e) { E.push(e.message); }
   var ig = raw.integrator;
-  if (!isObj(ig)) E.push('integrator: required object, e.g. {"type": "rk4", "time_step_s": 10}');
-  else if (ig.type === 'dop853') E.push('integrator.type: "dop853" (adaptive step, SIM_017)' + NOT_BASELINE);
-  else if (ig.type !== 'rk4') E.push('integrator.type: must be "rk4"');
-  else { keys(ig, ['type', 'time_step_s'], 'integrator'); c.dt = num(ig, 'time_step_s', 'integrator', { gt: 0 }); }
+  if (!isObj(ig)) E.push('integrator: required object, e.g. {"type": "rk4", "time_step_s": 10} or {"type": "dop853", "rtol": 1e-10, "atol": 1e-6}');
+  else if (ig.type === 'dop853') {     // adaptive step (SIM_017)
+    keys(ig, ['type', 'rtol', 'atol', 'max_step_s', 'initial_step_s'], 'integrator'); c.integrator = 'dop853';
+    c.rtol = num(ig, 'rtol', 'integrator', { min: 1e-13, lt: 1 }); c.atol = num(ig, 'atol', 'integrator', { gt: 0 });
+    c.maxStep = ig.max_step_s === undefined ? Infinity : num(ig, 'max_step_s', 'integrator', { gt: 0 });
+    c.initialStep = ig.initial_step_s === undefined ? 0 : num(ig, 'initial_step_s', 'integrator', { gt: 0 });
+  } else if (ig.type !== 'rk4') E.push('integrator.type: must be "rk4" or "dop853"');
+  else { keys(ig, ['type', 'time_step_s'], 'integrator'); c.integrator = 'rk4'; c.dt = num(ig, 'time_step_s', 'integrator', { gt: 0 }); }
   c.outStep = num(raw, 'output_step_s', '', { gt: 0 });
   // forces (SIM_026, SIM_093)
   c.drag = false; c.srp = false; var fm = raw.force_model;
@@ -186,13 +190,13 @@ export function normalizeConfig(raw) {
       var el = stateToKep(P.mu, s.state);
       if (el.a > 0 && el.e < 1) {
         var period = TWO_PI * Math.sqrt(el.a * el.a * el.a / P.mu);
-        if (c.dt > period * 0.25) {
+        if (c.integrator === 'rk4' && c.dt > period * 0.25) {
           E.push('integrator.time_step_s: step (' + c.dt + ' s) exceeds 25% of orbital period (' + Math.round(period) + ' s) for "' + s.name + '". Fixed-step RK4 will diverge. Reduce time_step_s.');
-        } else if (c.dt > period / 20) {
+        } else if (c.integrator === 'rk4' && c.dt > period / 20) {
           W.push('Time step ' + c.dt + ' s is coarse (>5% of orbital period ' + Math.round(period) + ' s for "' + s.name + '"). Recommend time_step_s <= ' + Math.round(period / 20) + ' s for high numerical fidelity.');
         }
-        if (el.e > 0.85) {
-          W.push('Satellite "' + s.name + '" has high eccentricity (e = ' + el.e.toFixed(3) + '). High curvature at periapsis requires small step sizes (recommend time_step_s <= 1 s).');
+        if (el.e > 0.85 && c.integrator === 'rk4') {
+          W.push('Satellite "' + s.name + '" has high eccentricity (e = ' + el.e.toFixed(3) + '). High curvature at periapsis requires small step sizes (recommend time_step_s <= 1 s, or the adaptive dop853 integrator).');
         }
         var incDeg = el.i * R2D;
         if ((incDeg < 0.05 || incDeg > 179.95) && P.shape === 'earth_default') {
@@ -200,7 +204,7 @@ export function normalizeConfig(raw) {
         }
       }
     });
-    var nSteps = Math.ceil(c.duration / c.dt - 1e-9), nOut = Math.floor(c.duration / c.outStep + 1e-9) + 1;
+    var nSteps = c.integrator === 'rk4' ? Math.ceil(c.duration / c.dt - 1e-9) : 0, nOut = Math.floor(c.duration / c.outStep + 1e-9) + 1;
     if (nOut * c.sats.length > LIMITS.maxRows) E.push('output_step_s: run would write ' + nOut * c.sats.length + ' rows (limit ' + LIMITS.maxRows + '). Increase output_step_s or shorten the run');
     if (nSteps * c.sats.length > LIMITS.maxSatSteps) E.push('integrator.time_step_s: run needs ' + nSteps * c.sats.length + ' satellite-steps (limit ' + LIMITS.maxSatSteps + '). Increase the step or shorten the run');
     c.nSteps = nSteps; c.nOut = nOut; c.warnings = W;

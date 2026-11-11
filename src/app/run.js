@@ -30,7 +30,8 @@ export function runSim() {
     catch (e) { running = false; $('run').disabled = false; $('progress').hidden = true; return fail(e); }
     if (!r.done) { $('bar').style.width = (100 * r.value).toFixed(1) + '%'; return setTimeout(slice, 0); }
     running = false; $('run').disabled = false; $('progress').hidden = true;
-    loadPlan(r.value.csv, 'Ran ' + r.value.steps + ' steps of ' + r.value.dt + ' s in ' + ((performance.now() - t0) / 1000).toFixed(2) + ' s. ');
+    var ig = r.value.integrator, what = ig && ig.type === 'dop853' ? r.value.steps + ' adaptive steps (' + (ig.hMin < Infinity ? +ig.hMin.toPrecision(3) + ' to ' : '') + +ig.hMax.toPrecision(3) + ' s)' : r.value.steps + ' steps of ' + r.value.dt + ' s';
+    loadPlan(r.value.csv, 'Ran ' + what + ' in ' + ((performance.now() - t0) / 1000).toFixed(2) + ' s. ');
   })();
 }
 

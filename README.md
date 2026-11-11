@@ -9,7 +9,7 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Gravity:** WGS84 Earth with J2, J3, J4 zonals, or a uniform sphere (asteroid, moon) with its own spin pole.
 - **Earth orientation:** GCRF to ITRF with IAU 2006 precession, IAU 2000B nutation (77 terms) and the Earth rotation angle. Checked against ERFA. Polar motion not applied.
 - **Time:** UTC, TAI, TT, TDB, GPS, with the IERS leap-second table kept as data in `index.html`.
-- **Integrator:** fixed-step RK4. Output rows are Hermite-interpolated, so the output step is independent of the integration step.
+- **Integrators:** fixed-step RK4 (output rows Hermite-interpolated), or adaptive DOP853 with rtol/atol step control and 7th-order dense output. DOP853 steps land on burns and shadow boundaries. Either way the output step is independent of the integration step.
 - **Drag:** exponential atmosphere (Vallado's table), co-rotating air, re-entry declared at 80 km. No solar activity.
 - **Solar radiation pressure:** cannonball model, 4.56e-6 N/m² at 1 AU scaled by 1/r², switched off in a cylindrical Earth shadow. Cr can be a constant or a time schedule.
 - **Burns:** impulsive, in LVLH (radial, along-track, cross-track) or inertial axes, applied at the exact commanded time.
@@ -17,7 +17,7 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Checks:** energy residual after removing drag work, SRP work and burn energy, so the report shows pure numerical error. Jacobi integral for a uniform sphere.
 - **Outputs:** `plan.csv` ephemeris, LTAN, altitude, beta angle, eclipse and inter-satellite range charts, each exportable as CSV.
 
-Not modelled: tesseral harmonics, Sun and Moon gravity, penumbra, attitude, adaptive integrators. See `docs/` for the full requirement list and status.
+Not modelled: tesseral harmonics, Sun and Moon gravity, penumbra, attitude. See `docs/` for the full requirement list and status.
 
 ## Layout
 
@@ -28,13 +28,14 @@ src/main.js              entry point: runs each app module's init() in order
 src/core/                physics, no DOM. Runs in the browser and in Node
   constants, math, time, earth-orientation, elements, environment, parent, sun,
   interp, patterns, tle, cr-schedule, config, propagator, plan-csv, ltan, index
-src/data/                generated tables: nutation series, TDB series, land outlines
+src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients
 src/app/                 page logic: boot, presets, form, run, report, infotip, start
 src/viewer/              three.js globe, Mercator map, charts, docs tab, playback loop
 scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
 src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
-tests/core/              Node tests for the physics (ERFA, SGP4 and independent-integrator checks)
+tests/core/              Node tests for the physics (ERFA, SGP4, SciPy DOP853 and independent-integrator checks)
+tools/gen_dop853.py      regenerates the DOP853 coefficient table and its SciPy test truth
 tests/browser/           Playwright smoke test of both builds
 tools/gen_tables.py      regenerates the ERFA-derived tables and test truth
 docs/                    requirement sheets (baseline and additional)

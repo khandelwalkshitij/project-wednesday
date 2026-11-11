@@ -107,6 +107,11 @@ export function renderForm() {
   if (!c.satellites || typeof c.satellites !== 'object') c.satellites = { count: 1, mass_kg: 100, orbits: [defaultOrbit(c)] };
   if (!c.integrator || typeof c.integrator !== 'object') c.integrator = { type: 'rk4', time_step_s: 10 };
   var earth = c.parent.shape === 'earth_default', sa = c.satellites, kids;
+  var ig = c.integrator, adaptive = ig.type === 'dop853';
+  var integSel = lab('Integrator', selIn([['rk4', 'RK4, fixed step'], ['dop853', 'DOP853, adaptive']], adaptive ? 'dop853' : 'rk4', function (v) {
+    c.integrator = v === 'dop853' ? { type: 'dop853', rtol: 1e-10, atol: 1e-6 } : { type: 'rk4', time_step_s: 10 }; commit(true);
+  }));
+  var stepFields = function () { return adaptive ? [lab('rtol', numIn(ig, 'rtol', { w: 70 })), lab('atol', numIn(ig, 'atol', { w: 70 }))] : [lab('Time step (s)', numIn(ig, 'time_step_s', { w: 70 }))]; };
   // parent
   kids = [row([lab('Body', selIn([['earth_default', 'Earth (WGS84, J2 to J4)'], ['sphere_uniform', 'Uniform sphere']], earth ? 'earth_default' : 'sphere_uniform', function (v) {
     if (v === 'earth_default') c.parent = { shape: 'earth_default' };
@@ -130,10 +135,11 @@ export function renderForm() {
     var setDur = function () { var x = parseFloat(dv.value); if (isFinite(x) && x > 0) { c.duration = +(x * unit).toPrecision(15); commit(); } };
     dv.addEventListener('change', setDur);
     kids.push(row([lab('Duration', dv), lab('Unit', selIn([[86400, 'days'], [3600, 'hours'], [60, 'minutes'], [1, 'seconds']], unit, function (v) { unit = +v; setDur(); })),
-      lab('Time step (s)', numIn(c.integrator, 'time_step_s', { w: 70 })), lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
+      lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
   }
-  if (c.end_epoch !== undefined) kids.push(row([lab('Time step (s)', numIn(c.integrator, 'time_step_s', { w: 70 })), lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
-  formRoot.appendChild(grp('Time', kids, '<b>Time &amp; Integrator Advice</b><br>• <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>• <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>• <b>Time step</b>: Fixed RK4 step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).'));
+  if (c.end_epoch !== undefined) kids.push(row([lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
+  kids.push(row([integSel].concat(stepFields())));
+  formRoot.appendChild(grp('Time', kids, '<b>Time &amp; Integrator Advice</b><br>• <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>• <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>• <b>RK4</b>: fixed time step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).<br>• <b>DOP853</b>: picks its own step to keep the error per step within <b>rtol</b> (fraction of the value) and <b>atol</b> (m or m/s). rtol 1e-10 is a good default; 1e-12 for reference runs. Usually faster than RK4 at the same accuracy.'));
   // forces
   if (earth) {
     var dragOn = !!(c.force_model && c.force_model.drag === true);

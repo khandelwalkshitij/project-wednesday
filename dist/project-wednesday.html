@@ -282,7 +282,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
           <dt>parent.shape</dt><dd><code>"earth_default"</code> (no other inputs) or <code>"sphere_uniform"</code> with <code>radius_m</code>, <code>density_kg_m3</code> and <code>rotation</code>: <code>spin_period_s</code>, <code>pole_ra_deg</code>, <code>pole_dec_deg</code>, <code>prime_meridian_deg</code>.</dd>
           <dt>start_epoch</dt><dd><code>"YYYY-MM-DDThh:mm:ss.sss SCALE"</code>, SCALE one of UTC, TAI, TT, TDB, GPS.</dd>
           <dt>duration <em>or</em> end_epoch</dt><dd>Seconds, or an ISO 8601 duration such as <code>"P1DT6H"</code>. Or an end epoch in the start_epoch format. Not both.</dd>
-          <dt>integrator</dt><dd><code>{"type": "rk4", "time_step_s": 10}</code></dd>
+          <dt>integrator</dt><dd><code>{"type": "rk4", "time_step_s": 10}</code> (fixed step) or <code>{"type": "dop853", "rtol": 1e-10, "atol": 1e-6}</code> (adaptive; optional <code>max_step_s</code>, <code>initial_step_s</code>). atol is in m and m/s.</dd>
           <dt>output_step_s</dt><dd>Spacing of rows in plan.csv. Independent of the integration step.</dd>
           <dt>satellites</dt><dd><code>count</code> (1 to 100), <code>mass_kg</code> (up to 10000), <code>names</code> (list) or <code>name_prefix</code>, and <code>orbits</code>: one entry per satellite.</dd>
           <dt>orbits[ ]</dt><dd><code>{"type": "keplerian", "a_m", "e", "i_deg", "raan_deg", "argp_deg", "ta_deg"}</code> (osculating, inertial frame) or <code>{"type": "cartesian", "r_m": [x, y, z], "v_m_s": [vx, vy, vz]}</code>.</dd>
@@ -350,6 +350,43 @@ button.mini { min-height: 19px; padding: 0 6px; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
+  var __knownSymbol = (name, symbol) => (symbol = Symbol[name]) ? symbol : Symbol.for("Symbol." + name);
+  var __typeError = (msg) => {
+    throw TypeError(msg);
+  };
+  var __await = function(promise, isYieldStar) {
+    this[0] = promise;
+    this[1] = isYieldStar;
+  };
+  var __yieldStar = (value) => {
+    var obj = value[__knownSymbol("asyncIterator")], isAwait = false, method, it = {};
+    if (obj == null) {
+      obj = value[__knownSymbol("iterator")]();
+      method = (k) => it[k] = (x) => obj[k](x);
+    } else {
+      obj = obj.call(value);
+      method = (k) => it[k] = (v) => {
+        if (isAwait) {
+          isAwait = false;
+          if (k === "throw") throw v;
+          return v;
+        }
+        isAwait = true;
+        return {
+          done: false,
+          value: new __await(new Promise((resolve) => {
+            var x = obj[k](v);
+            if (!(x instanceof Object)) __typeError("Object expected");
+            resolve(x);
+          }), 1)
+        };
+      };
+    }
+    return it[__knownSymbol("iterator")] = () => it, method("next"), "throw" in obj ? method("throw") : it.throw = (x) => {
+      throw x;
+    }, "return" in obj && method("return"), it;
+  };
+
   // src/app/dom.js
   function $(id) {
     return document.getElementById(id);
@@ -2630,11 +2667,18 @@ button.mini { min-height: 19px; padding: 0 6px; }
       E.push(e.message);
     }
     var ig = raw.integrator;
-    if (!isObj(ig)) E.push('integrator: required object, e.g. {"type": "rk4", "time_step_s": 10}');
-    else if (ig.type === "dop853") E.push('integrator.type: "dop853" (adaptive step, SIM_017)' + NOT_BASELINE);
-    else if (ig.type !== "rk4") E.push('integrator.type: must be "rk4"');
+    if (!isObj(ig)) E.push('integrator: required object, e.g. {"type": "rk4", "time_step_s": 10} or {"type": "dop853", "rtol": 1e-10, "atol": 1e-6}');
+    else if (ig.type === "dop853") {
+      keys(ig, ["type", "rtol", "atol", "max_step_s", "initial_step_s"], "integrator");
+      c.integrator = "dop853";
+      c.rtol = num(ig, "rtol", "integrator", { min: 1e-13, lt: 1 });
+      c.atol = num(ig, "atol", "integrator", { gt: 0 });
+      c.maxStep = ig.max_step_s === void 0 ? Infinity : num(ig, "max_step_s", "integrator", { gt: 0 });
+      c.initialStep = ig.initial_step_s === void 0 ? 0 : num(ig, "initial_step_s", "integrator", { gt: 0 });
+    } else if (ig.type !== "rk4") E.push('integrator.type: must be "rk4" or "dop853"');
     else {
       keys(ig, ["type", "time_step_s"], "integrator");
+      c.integrator = "rk4";
       c.dt = num(ig, "time_step_s", "integrator", { gt: 0 });
     }
     c.outStep = num(raw, "output_step_s", "", { gt: 0 });
@@ -2801,13 +2845,13 @@ button.mini { min-height: 19px; padding: 0 6px; }
         var el2 = stateToKep(P.mu, s.state);
         if (el2.a > 0 && el2.e < 1) {
           var period = TWO_PI * Math.sqrt(el2.a * el2.a * el2.a / P.mu);
-          if (c.dt > period * 0.25) {
+          if (c.integrator === "rk4" && c.dt > period * 0.25) {
             E.push("integrator.time_step_s: step (" + c.dt + " s) exceeds 25% of orbital period (" + Math.round(period) + ' s) for "' + s.name + '". Fixed-step RK4 will diverge. Reduce time_step_s.');
-          } else if (c.dt > period / 20) {
+          } else if (c.integrator === "rk4" && c.dt > period / 20) {
             W.push("Time step " + c.dt + " s is coarse (>5% of orbital period " + Math.round(period) + ' s for "' + s.name + '"). Recommend time_step_s <= ' + Math.round(period / 20) + " s for high numerical fidelity.");
           }
-          if (el2.e > 0.85) {
-            W.push('Satellite "' + s.name + '" has high eccentricity (e = ' + el2.e.toFixed(3) + "). High curvature at periapsis requires small step sizes (recommend time_step_s <= 1 s).");
+          if (el2.e > 0.85 && c.integrator === "rk4") {
+            W.push('Satellite "' + s.name + '" has high eccentricity (e = ' + el2.e.toFixed(3) + "). High curvature at periapsis requires small step sizes (recommend time_step_s <= 1 s, or the adaptive dop853 integrator).");
           }
           var incDeg = el2.i * R2D;
           if ((incDeg < 0.05 || incDeg > 179.95) && P.shape === "earth_default") {
@@ -2815,7 +2859,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
           }
         }
       });
-      var nSteps = Math.ceil(c.duration / c.dt - 1e-9), nOut = Math.floor(c.duration / c.outStep + 1e-9) + 1;
+      var nSteps = c.integrator === "rk4" ? Math.ceil(c.duration / c.dt - 1e-9) : 0, nOut = Math.floor(c.duration / c.outStep + 1e-9) + 1;
       if (nOut * c.sats.length > LIMITS.maxRows) E.push("output_step_s: run would write " + nOut * c.sats.length + " rows (limit " + LIMITS.maxRows + "). Increase output_step_s or shorten the run");
       if (nSteps * c.sats.length > LIMITS.maxSatSteps) E.push("integrator.time_step_s: run needs " + nSteps * c.sats.length + " satellite-steps (limit " + LIMITS.maxSatSteps + "). Increase the step or shorten the run");
       c.nSteps = nSteps;
@@ -2885,6 +2929,187 @@ button.mini { min-height: 19px; padding: 0 6px; }
     var x = Math.round((h % 24 + 24) % 24 * 3600) % 86400;
     return p2(Math.floor(x / 3600)) + ":" + p2(Math.floor(x / 60) % 60) + ":" + p2(x % 60);
   }
+
+  // src/data/dop853-coefficients.js
+  var N_STAGES = 12;
+  var N_STAGES_EXTENDED = 16;
+  var A = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.05260015195876773, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.0197250569845379, 0.0591751709536137, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.02958758547680685, 0, 0.08876275643042054, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.2413651341592667, 0, -0.8845494793282861, 0.924834003261792, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.037037037037037035, 0, 0, 0.17082860872947386, 0.12546768756682242, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.037109375, 0, 0, 0.17025221101954405, 0.06021653898045596, -0.017578125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.03709200011850479, 0, 0, 0.17038392571223998, 0.10726203044637328, -0.015319437748624402, 0.008273789163814023, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0.6241109587160757, 0, 0, -3.3608926294469414, -0.868219346841726, 27.59209969944671, 20.154067550477894, -43.48988418106996, 0, 0, 0, 0, 0, 0, 0, 0], [0.47766253643826434, 0, 0, -2.4881146199716677, -0.590290826836843, 21.230051448181193, 15.279233632882423, -33.28821096898486, -0.020331201708508627, 0, 0, 0, 0, 0, 0, 0], [-0.9371424300859873, 0, 0, 5.186372428844064, 1.0914373489967295, -8.149787010746927, -18.52006565999696, 22.739487099350505, 2.4936055526796523, -3.0467644718982196, 0, 0, 0, 0, 0, 0], [2.273310147516538, 0, 0, -10.53449546673725, -2.0008720582248625, -17.9589318631188, 27.94888452941996, -2.8589982771350235, -8.87285693353063, 12.360567175794303, 0.6433927460157636, 0, 0, 0, 0, 0], [0.054293734116568765, 0, 0, 0, 0, 4.450312892752409, 1.8915178993145003, -5.801203960010585, 0.3111643669578199, -0.1521609496625161, 0.20136540080403034, 0.04471061572777259, 0, 0, 0, 0], [0.056167502283047954, 0, 0, 0, 0, 0, 0.25350021021662483, -0.2462390374708025, -0.12419142326381637, 0.15329179827876568, 0.00820105229563469, 0.007567897660545699, -8298e-6, 0, 0, 0], [0.03183464816350214, 0, 0, 0, 0, 0.028300909672366776, 0.053541988307438566, -0.05492374857139099, 0, 0, -10834732869724932e-20, 3825710908356584e-19, -34046500868740456e-20, 0.1413124436746325, 0, 0], [-0.42889630158379194, 0, 0, 0, 0, -4.697621415361164, 7.683421196062599, 4.06898981839711, 0.3567271874552811, 0, 0, 0, -0.0013990241651590145, 2.9475147891527724, -9.15095847217987, 0]];
+  var B = [0.054293734116568765, 0, 0, 0, 0, 4.450312892752409, 1.8915178993145003, -5.801203960010585, 0.3111643669578199, -0.1521609496625161, 0.20136540080403034, 0.04471061572777259];
+  var C = [0, 0.05260015195876773, 0.0789002279381516, 0.1183503419072274, 0.2816496580927726, 0.3333333333333333, 0.25, 0.3076923076923077, 0.6512820512820513, 0.6, 0.8571428571428571, 1, 1, 0.1, 0.2, 0.7777777777777778];
+  var E3 = [-0.18980075407240762, 0, 0, 0, 0, 4.450312892752409, 1.8915178993145003, -5.801203960010585, -0.4226823213237919, -0.1521609496625161, 0.20136540080403034, 0.02265179219836082, 0];
+  var E5 = [0.01312004499419488, 0, 0, 0, 0, -1.2251564463762044, -0.4957589496572502, 1.6643771824549864, -0.35032884874997366, 0.3341791187130175, 0.08192320648511571, -0.022355307863886294, 0];
+  var D = [[-8.428938276109013, 0, 0, 0, 0, 0.5667149535193777, -3.0689499459498917, 2.38466765651207, 2.117034582445028, -0.871391583777973, 2.2404374302607883, 0.6315787787694688, -0.08899033645133331, 18.148505520854727, -9.194632392478356, -4.436036387594894], [10.427508642579134, 0, 0, 0, 0, 242.28349177525817, 165.20045171727028, -374.5467547226902, -22.113666853125306, 7.733432668472264, -30.674084731089398, -9.332130526430229, 15.697238121770845, -31.139403219565178, -9.35292435884448, 35.81684148639408], [19.985053242002433, 0, 0, 0, 0, -387.0373087493518, -189.17813819516758, 527.8081592054236, -11.57390253995963, 6.8812326946963, -1.0006050966910838, 0.7777137798053443, -2.778205752353508, -60.19669523126412, 84.32040550667716, 11.99229113618279], [-25.69393346270375, 0, 0, 0, 0, -154.18974869023643, -231.5293791760455, 357.6391179106141, 93.40532418362432, -37.45832313645163, 104.0996495089623, 29.8402934266605, -43.53345659001114, 96.32455395918828, -39.17726167561544, -149.72683625798564]];
+
+  // src/core/dop853.js
+  var SAFETY = 0.9;
+  var MIN_FACTOR = 0.2;
+  var MAX_FACTOR = 10;
+  var EXPONENT = -1 / 8;
+  function Dop853(n, nErr, fun, opt) {
+    var K = [], k;
+    for (k = 0; k < N_STAGES_EXTENDED; k++) K.push(new Float64Array(n));
+    this.n = n;
+    this.nErr = nErr;
+    this.fun = fun;
+    this.rtol = opt.rtol;
+    this.atol = opt.atol;
+    this.maxStep = opt.maxStep || Infinity;
+    this.h0 = opt.initialStep || 0;
+    this.K = K;
+    this.y = new Float64Array(n);
+    this.yOld = new Float64Array(n);
+    this.f = K[0];
+    this.fOld = new Float64Array(n);
+    this.ys = new Float64Array(n);
+    this.Q = [new Float64Array(n), new Float64Array(n), new Float64Array(n), new Float64Array(n), new Float64Array(n), new Float64Array(n), new Float64Array(n)];
+    this.t = 0;
+    this.tOld = 0;
+    this.h = 0;
+    this.hAbs = 0;
+    this.denseReady = false;
+    this.accepted = 0;
+    this.rejected = 0;
+    this.hMin = Infinity;
+    this.hMax = 0;
+  }
+  Dop853.prototype.init = function(t, y, tEnd) {
+    this.t = t;
+    this.y.set(y);
+    this.fun(t, this.y, this.K[0]);
+    this.hAbs = this.h0 > 0 ? Math.min(this.h0, this.maxStep) : this.initialStep(tEnd);
+  };
+  Dop853.prototype.reset = function() {
+    this.fun(this.t, this.y, this.K[0]);
+    this.denseReady = false;
+  };
+  Dop853.prototype.rms = function(v, scale) {
+    var s = 0;
+    for (var k = 0; k < this.nErr; k++) {
+      var q = v[k] / scale[k];
+      s += q * q;
+    }
+    return Math.sqrt(s / this.nErr);
+  };
+  Dop853.prototype.initialStep = function(tEnd) {
+    var n = this.n, y0 = this.y, f0 = this.K[0], sc = new Float64Array(n), y1 = new Float64Array(n), f1 = new Float64Array(n), df = new Float64Array(n), k, len = Math.abs(tEnd - this.t);
+    if (len === 0) return 0;
+    for (k = 0; k < n; k++) sc[k] = this.atol + Math.abs(y0[k]) * this.rtol;
+    var d0 = this.rms(y0, sc), d1 = this.rms(f0, sc), h0 = d0 < 1e-5 || d1 < 1e-5 ? 1e-6 : 0.01 * d0 / d1;
+    h0 = Math.min(h0, len);
+    for (k = 0; k < n; k++) y1[k] = y0[k] + h0 * f0[k];
+    this.fun(this.t + h0, y1, f1);
+    for (k = 0; k < n; k++) df[k] = f1[k] - f0[k];
+    var d2 = this.rms(df, sc) / h0, h1 = d1 <= 1e-15 && d2 <= 1e-15 ? Math.max(1e-6, h0 * 1e-3) : Math.pow(0.01 / Math.max(d1, d2), 1 / 8);
+    return Math.min(100 * h0, h1, len, this.maxStep);
+  };
+  Dop853.prototype.step = function(tEnd) {
+    var n = this.n, K = this.K, y = this.y, ys = this.ys, t = this.t, rtol = this.rtol, atol = this.atol, s, j, k;
+    var minStep = 10 * Math.abs(t) * 2220446049250313e-31 + 1e-12, hAbs = Math.min(Math.max(this.hAbs, minStep), this.maxStep), rejected = false;
+    for (; ; ) {
+      if (hAbs < minStep) return false;
+      var tNew = t + hAbs, clipped = tNew >= tEnd;
+      if (clipped) tNew = tEnd;
+      var h = tNew - t;
+      for (s = 1; s < N_STAGES; s++) {
+        var a = A[s];
+        for (k = 0; k < n; k++) {
+          var dy = 0;
+          for (j = 0; j < s; j++) if (a[j] !== 0) dy += a[j] * K[j][k];
+          ys[k] = y[k] + h * dy;
+        }
+        this.fun(t + C[s] * h, ys, K[s]);
+      }
+      var yNew = this.yOld;
+      for (k = 0; k < n; k++) {
+        var acc = 0;
+        for (j = 0; j < N_STAGES; j++) if (B[j] !== 0) acc += B[j] * K[j][k];
+        yNew[k] = y[k] + h * acc;
+      }
+      this.fun(tNew, yNew, K[N_STAGES]);
+      var e5 = 0, e3 = 0;
+      for (k = 0; k < this.nErr; k++) {
+        var sc = atol + Math.max(Math.abs(y[k]), Math.abs(yNew[k])) * rtol, q5 = 0, q3 = 0;
+        for (j = 0; j <= N_STAGES; j++) {
+          q5 += E5[j] * K[j][k];
+          q3 += E3[j] * K[j][k];
+        }
+        q5 /= sc;
+        q3 /= sc;
+        e5 += q5 * q5;
+        e3 += q3 * q3;
+      }
+      var err = e5 === 0 && e3 === 0 ? 0 : Math.abs(h) * e5 / Math.sqrt((e5 + 0.01 * e3) * this.nErr);
+      if (err < 1) {
+        var factor = err === 0 ? MAX_FACTOR : Math.min(MAX_FACTOR, SAFETY * Math.pow(err, EXPONENT));
+        if (rejected) factor = Math.min(1, factor);
+        this.fOld.set(K[0]);
+        this.yOld = y;
+        this.y = yNew;
+        K[0].set(K[N_STAGES]);
+        this.tOld = t;
+        this.t = tNew;
+        this.h = h;
+        this.hAbs = clipped ? hAbs : hAbs * factor;
+        this.denseReady = false;
+        this.accepted++;
+        if (h < this.hMin && !clipped) this.hMin = h;
+        if (h > this.hMax) this.hMax = h;
+        return true;
+      }
+      hAbs *= Math.max(MIN_FACTOR, SAFETY * Math.pow(err, EXPONENT));
+      rejected = true;
+      this.rejected++;
+    }
+  };
+  Dop853.prototype.rollback = function() {
+    var y = this.y;
+    this.y = this.yOld;
+    this.yOld = y;
+    this.t = this.tOld;
+    this.K[0].set(this.fOld);
+    this.accepted--;
+    this.denseReady = false;
+    this.hAbs = Math.min(this.hAbs, this.h);
+  };
+  Dop853.prototype.dense = function(t, out) {
+    var n = this.n, K = this.K, h = this.h, y0 = this.yOld, y1 = this.y, Q = this.Q, s, j, k;
+    if (!this.denseReady) {
+      var K0 = K[0], keep = this.ys;
+      keep.set(K0);
+      K0.set(this.fOld);
+      for (s = N_STAGES + 1; s < N_STAGES_EXTENDED; s++) {
+        var a = A[s], yy = new Float64Array(n);
+        for (k = 0; k < n; k++) {
+          var dy = 0;
+          for (j = 0; j < s; j++) if (a[j] !== 0) dy += a[j] * (j === N_STAGES ? keep[k] : K[j][k]);
+          yy[k] = y0[k] + h * dy;
+        }
+        this.fun(this.tOld + C[s] * h, yy, K[s]);
+      }
+      for (k = 0; k < n; k++) {
+        var dY = y1[k] - y0[k];
+        Q[0][k] = dY;
+        Q[1][k] = h * this.fOld[k] - dY;
+        Q[2][k] = 2 * dY - h * (keep[k] + this.fOld[k]);
+        for (var r = 0; r < 4; r++) {
+          var acc = 0;
+          for (j = 0; j < N_STAGES_EXTENDED; j++) if (D[r][j] !== 0) acc += D[r][j] * (j === N_STAGES ? keep[k] : K[j][k]);
+          Q[3 + r][k] = h * acc;
+        }
+      }
+      K0.set(keep);
+      this.denseReady = true;
+    }
+    var x = (t - this.tOld) / h;
+    for (k = 0; k < n; k++) {
+      var v = 0;
+      for (var i = 0; i < 7; i++) {
+        v += Q[6 - i][k];
+        v *= i % 2 === 0 ? x : 1 - x;
+      }
+      out[k] = v + y0[k];
+    }
+  };
 
   // src/core/sun.js
   function sunDirection(tt) {
@@ -2979,7 +3204,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
       var zz = x * p[0] + yy * p[1] + z * p[2];
       return Math.sqrt((x * x + yy * yy + z * z - zz * zz) / (ra * ra) + zz * zz / (rb2 * rb2)) - 1;
     }
-    function deriv(s2, so2, p, out, oo, b, satObj, t, sd) {
+    function deriv(s2, so2, p, out, oo, b, satObj, t, sd, lit) {
       var x = s2[so2], yy = s2[so2 + 1], z = s2[so2 + 2], vx = s2[so2 + 3], vy = s2[so2 + 4], vz = s2[so2 + 5];
       out[oo] = vx;
       out[oo + 1] = vy;
@@ -2997,7 +3222,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
           pwr += k5 * (rx * vx + ry * vy + rz * vz);
         }
       }
-      if (srp && satObj && satObj.area && sd && !inShadow(x, yy, z, sd, EARTH.a)) {
+      if (srp && satObj && satObj.area && sd && (lit === void 0 ? !inShadow(x, yy, z, sd, EARTH.a) : lit)) {
         var crVal = getCr(satObj.cr, t);
         var au = sunDistanceAu(tt0 + t), srp_k = P_SRP * crVal * satObj.area / satObj.mass / (au * au);
         var ax = -srp_k * sd[0], ay = -srp_k * sd[1], az = -srp_k * sd[2];
@@ -3040,11 +3265,11 @@ button.mini { min-height: 19px; padding: 0 6px; }
       impS[i2] = Array.from(tmp);
       return tA + hi * hh2;
     }
-    function applyBurn(s2, B2) {
-      if (B2.frame === "inertial") {
-        s2[3] += B2.dv[0];
-        s2[4] += B2.dv[1];
-        s2[5] += B2.dv[2];
+    function applyBurn(s2, B3) {
+      if (B3.frame === "inertial") {
+        s2[3] += B3.dv[0];
+        s2[4] += B3.dv[1];
+        s2[5] += B3.dv[2];
         return;
       }
       var r = Math.hypot(s2[0], s2[1], s2[2]), rx = s2[0] / r, ry = s2[1] / r, rz = s2[2] / r, hx = s2[1] * s2[5] - s2[2] * s2[4], hy = s2[2] * s2[3] - s2[0] * s2[5], hz = s2[0] * s2[4] - s2[1] * s2[3], hn = Math.hypot(hx, hy, hz);
@@ -3052,9 +3277,9 @@ button.mini { min-height: 19px; padding: 0 6px; }
       hy /= hn;
       hz /= hn;
       var tx = hy * rz - hz * ry, ty = hz * rx - hx * rz, tz = hx * ry - hy * rx;
-      s2[3] += B2.dv[0] * rx + B2.dv[1] * tx + B2.dv[2] * hx;
-      s2[4] += B2.dv[0] * ry + B2.dv[1] * ty + B2.dv[2] * hy;
-      s2[5] += B2.dv[0] * rz + B2.dv[1] * tz + B2.dv[2] * hz;
+      s2[3] += B3.dv[0] * rx + B3.dv[1] * tx + B3.dv[2] * hx;
+      s2[4] += B3.dv[0] * ry + B3.dv[1] * ty + B3.dv[2] * hy;
+      s2[5] += B3.dv[0] * rz + B3.dv[1] * tz + B3.dv[2] * hz;
     }
     function row2(i2, epoch2, t, s2, o2, rot2, sd) {
       return c.sats[i2].name + "," + epoch2 + "," + t + "," + s2[o2].toFixed(4) + "," + s2[o2 + 1].toFixed(4) + "," + s2[o2 + 2].toFixed(4) + "," + s2[o2 + 3].toFixed(7) + "," + s2[o2 + 4].toFixed(7) + "," + s2[o2 + 5].toFixed(7) + "," + rot2 + "," + (sd ? inShadow(s2[o2], s2[o2 + 1], s2[o2 + 2], sd, EARTH.a) ? "1" : "0" : "");
@@ -3069,6 +3294,153 @@ button.mini { min-height: 19px; padding: 0 6px; }
       if (L.h.length) v = unwrapHours(L.h[L.h.length - 1], v);
       L.t.push(t);
       L.h.push(v);
+    }
+    var POLE_DT = 60, poleTab = null;
+    function poleFast(t) {
+      var u = t / POLE_DT, j = Math.max(0, Math.floor(u)), s2 = u - j, a = 3 * j, q2;
+      if (!poleTab) {
+        poleTab = F(3 * (Math.ceil(c.duration / POLE_DT) + 3));
+        poleTab.fill(NaN);
+      }
+      for (q2 = j; q2 <= j + 1; q2++) if (isNaN(poleTab[3 * q2])) {
+        var pq2 = P.poleAt(tt0 + q2 * POLE_DT);
+        poleTab[3 * q2] = pq2[0];
+        poleTab[3 * q2 + 1] = pq2[1];
+        poleTab[3 * q2 + 2] = pq2[2];
+      }
+      var x = poleTab[a] + s2 * (poleTab[a + 3] - poleTab[a]), yy = poleTab[a + 1] + s2 * (poleTab[a + 4] - poleTab[a + 1]), z = poleTab[a + 2] + s2 * (poleTab[a + 5] - poleTab[a + 2]), r = Math.sqrt(x * x + yy * yy + z * z);
+      return [x / r, yy / r, z / r];
+    }
+    function* runAdaptive() {
+      var dur = c.duration, nOut = c.nOut, epsA = 1e-7, outS = [], nValid = new Int32Array(N), o7 = F(7), st2, stats = { steps: 0, rejected: 0, events: 0, hMin: Infinity, hMax: 0 };
+      function burnsAt(i3, t, bl3, bj2) {
+        while (bj2 < bl3.length && bl3[bj2].t <= t + epsA && bl3[bj2].t < dur - epsA) {
+          var B3 = bl3[bj2++], pq2 = poleFast(t), e12 = energy(st2.y, 0, pq2);
+          applyBurn(st2.y, B3);
+          var e22 = energy(st2.y, 0, pq2);
+          EB[i3] += e22[0] - e12[0];
+          JB[i3] += e22[1] - e12[1];
+          dvT[i3] += Math.hypot(B3.dv[0], B3.dv[1], B3.dv[2]);
+          st2.reset();
+        }
+        return bj2;
+      }
+      function impactIn(i3) {
+        var ta2 = st2.tOld, hh2 = st2.h, q2, x, lo = 0, hi = -1;
+        if (Math.min(surf(st2.yOld[0], st2.yOld[1], st2.yOld[2], poleFast(ta2)), surf(st2.y[0], st2.y[1], st2.y[2], poleFast(ta2 + hh2))) > 0.1) return Infinity;
+        for (q2 = 1; q2 <= 8 && hi < 0; q2++) {
+          x = q2 / 8;
+          st2.dense(ta2 + x * hh2, o7);
+          if (surf(o7[0], o7[1], o7[2], poleFast(ta2 + x * hh2)) <= 0) {
+            hi = x;
+            lo = (q2 - 1) / 8;
+          }
+        }
+        if (hi < 0) return Infinity;
+        for (q2 = 0; q2 < 50; q2++) {
+          x = 0.5 * (lo + hi);
+          st2.dense(ta2 + x * hh2, o7);
+          if (surf(o7[0], o7[1], o7[2], poleFast(ta2 + x * hh2)) <= 0) hi = x;
+          else lo = x;
+        }
+        st2.dense(ta2 + hi * hh2, o7);
+        impS[i3] = Array.from(o7.subarray(0, 6));
+        return ta2 + hi * hh2;
+      }
+      function shadowAt(t, yy) {
+        return inShadow(yy[0], yy[1], yy[2], sunDirection(tt0 + t), EARTH.a);
+      }
+      function shadowCrossing(s0) {
+        var ta2 = st2.tOld, hh2 = st2.h, lo = 0, hi = -1, q2, x;
+        st2.dense(ta2 + 0.5 * hh2, o7);
+        if (shadowAt(ta2 + 0.5 * hh2, o7) !== s0) hi = 0.5;
+        else if (shadowAt(ta2 + hh2, st2.y) !== s0) {
+          lo = 0.5;
+          hi = 1;
+        }
+        if (hi < 0) return Infinity;
+        for (q2 = 0; q2 < 60; q2++) {
+          x = 0.5 * (lo + hi);
+          st2.dense(ta2 + x * hh2, o7);
+          if (shadowAt(ta2 + x * hh2, o7) !== s0) hi = x;
+          else lo = x;
+        }
+        return ta2 + hi * hh2;
+      }
+      for (var i2 = 0; i2 < N; i2++) {
+        var sat = c.sats[i2], bl2 = c.burns[i2], bj = 0, buf = F(6 * nOut), kO = 1, y7 = F(7), k5;
+        var shadowEvents = srp && isE && sat.area > 0, lit = shadowEvents ? !inShadow(sat.state[0], sat.state[1], sat.state[2], sd0, EARTH.a) : void 0;
+        var fun = /* @__PURE__ */ (function(sat2, b) {
+          return function(t, yy, out) {
+            out[6] = deriv(yy, 0, poleFast(t), out, 0, b, sat2, t, isE ? sunDirection(tt0 + t) : null, lit);
+          };
+        })(sat, bc[i2]);
+        for (k5 = 0; k5 < 6; k5++) y7[k5] = sat.state[k5];
+        st2 = new Dop853(7, 6, fun, { rtol: c.rtol, atol: c.atol, maxStep: c.maxStep, initialStep: c.initialStep });
+        st2.init(0, y7, dur);
+        bj = burnsAt(i2, 0, bl2, bj);
+        var tEvent = Infinity;
+        while (st2.t < dur - epsA) {
+          var tLim = Math.min(bj < bl2.length && bl2[bj].t < dur - epsA ? bl2[bj].t : dur, tEvent);
+          if (!st2.step(tLim)) throw new Error('integrator: the dop853 step size became too small for "' + sat.name + '" at t = ' + st2.t.toFixed(3) + " s. Loosen rtol or atol.");
+          if (++stats.steps > LIMITS.maxSatSteps) throw new Error("integrator: run needs more than " + LIMITS.maxSatSteps + " satellite-steps. Loosen rtol or atol, or shorten the run");
+          if (shadowEvents) {
+            var landed = st2.t >= tEvent - 1e-9;
+            tEvent = Infinity;
+            if (!landed) {
+              var tc2 = shadowCrossing(!lit);
+              if (tc2 < st2.t - 1e-6) {
+                st2.rollback();
+                stats.steps--;
+                tEvent = tc2;
+                continue;
+              }
+            }
+            if (shadowAt(st2.t, st2.y) === lit) {
+              lit = !lit;
+              st2.reset();
+              stats.events++;
+            }
+          }
+          var tb2 = st2.t, last = tb2 >= dur - epsA, ti2 = impactIn(i2);
+          while (kO < nOut) {
+            var tk2 = kO * c.outStep;
+            if (tk2 > ti2 || !(tk2 < tb2 - epsA || last && tk2 <= tb2 + epsA)) break;
+            st2.dense(Math.min(tk2, tb2), o7);
+            buf.set(o7.subarray(0, 6), 6 * kO);
+            kO++;
+          }
+          if (ti2 < Infinity) {
+            tImp[i2] = ti2;
+            var is2 = impS[i2], rb3 = mvec(P.matrixAt(tt0 + ti2, ti2), [is2[0], is2[1], is2[2]]), g2 = geodetic(rb3[0], rb3[1], rb3[2], P.radius, P.flattening);
+            impacts.push({ name: sat.name, kind: drag ? "reentry" : "impact", t: ti2, epoch: formatUtc(tt0 + ti2), bodyFixed: rb3, latDeg: g2.lat * R2D, lonDeg: g2.lon * R2D, speed: Math.hypot(is2[3], is2[4], is2[5]) });
+            alive[i2] = false;
+            break;
+          }
+          W[i2] = st2.y[6];
+          var en2 = energy(st2.y, 0, poleFast(tb2));
+          dE[i2] = Math.max(dE[i2], Math.abs((en2[0] - E0[i2] - W[i2] - EB[i2]) / E0[i2]));
+          dJ[i2] = Math.max(dJ[i2], Math.abs((en2[1] - J0[i2] - JB[i2]) / J0[i2]));
+          bj = burnsAt(i2, tb2, bl2, bj);
+          if (stats.steps % 300 === 0) yield (i2 + tb2 / dur) / N;
+        }
+        nValid[i2] = kO;
+        outS.push(buf);
+        stats.rejected += st2.rejected;
+        if (st2.hMin < stats.hMin) stats.hMin = st2.hMin;
+        if (st2.hMax > stats.hMax) stats.hMax = st2.hMax;
+      }
+      for (var kk = 1; kk < nOut; kk++) {
+        var any = false;
+        for (i2 = 0; i2 < N; i2++) if (kk < nValid[i2]) any = true;
+        if (!any) break;
+        var tq2 = kk * c.outStep, epoch2 = formatUtc(tt0 + tq2), rot2 = rotDeg(tq2), ts2 = fmtT(tq2), Mk2 = isE ? earthRotation(tt0 + tq2, P.dut1).M : null, sdk2 = isE ? sunDirection(tt0 + tq2) : null;
+        for (i2 = 0; i2 < N; i2++) if (kk < nValid[i2]) {
+          lines.push(row2(i2, epoch2, ts2, outS[i2], 6 * kk, rot2, sdk2));
+          if (Mk2) addLt(i2, tq2, Mk2, outS[i2], 6 * kk);
+        }
+      }
+      return stats;
     }
     var pA = P.poleAt(tt0), pm, p1, i, o, k;
     var ep0 = formatUtc(tt0), rot0 = rotDeg(0), M0 = isE ? earthRotation(tt0, P.dut1).M : null, sd0 = isE ? sunDirection(tt0) : null, summary = [];
@@ -3086,7 +3458,8 @@ button.mini { min-height: 19px; padding: 0 6px; }
       var el2 = stateToKep(P.mu, c.sats[i].state), closed = el2.a > 0 && el2.e < 1;
       summary.push(closed ? { period: TWO_PI * Math.sqrt(el2.a * el2.a * el2.a / P.mu), hp: el2.a * (1 - el2.e) - P.radius, ha: el2.a * (1 + el2.e) - P.radius } : null);
     }
-    var kOut = 1, nAlive = N;
+    var kOut = 1, nAlive = N, aStats = null;
+    if (c.integrator === "dop853") aStats = yield* __yieldStar(runAdaptive());
     var sdA = sd0, sdB, sdM;
     for (var n = 0; n < c.nSteps && nAlive > 0; n++) {
       var ta = n * h, tb = (n + 1) * h, ti;
@@ -3102,7 +3475,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
         if (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {
           var segs = [], cur = y.slice(o, o + 6), fc = f0.slice(o, o + 6), pc = pw0[i], tc = ta, pq = pA;
           while (bi[i] < bl.length && bl[bi[i]].t < tb - eps) {
-            var B = bl[bi[i]++], tq = Math.max(B.t, tc);
+            var B2 = bl[bi[i]++], tq = Math.max(B2.t, tc);
             if (tq > tc + 1e-9) {
               var hh = tq - tc, nx = F(6), fx = F(6), pmq = P.poleAt(tt0 + tc + hh / 2);
               pq = P.poleAt(tt0 + tq);
@@ -3113,11 +3486,11 @@ button.mini { min-height: 19px; padding: 0 6px; }
               cur = nx.slice();
             }
             var e1 = energy(cur, 0, pq);
-            applyBurn(cur, B);
+            applyBurn(cur, B2);
             var e2 = energy(cur, 0, pq);
             EB[i] += e2[0] - e1[0];
             JB[i] += e2[1] - e1[1];
-            dvT[i] += Math.hypot(B.dv[0], B.dv[1], B.dv[2]);
+            dvT[i] += Math.hypot(B2.dv[0], B2.dv[1], B2.dv[2]);
             fc = F(6);
             pc = deriv(cur, 0, pq, fc, 0, bc[i], c.sats[i], tq, isE ? sunDirection(tt0 + tq) : null);
             tc = tq;
@@ -3199,6 +3572,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
     H.push("# sim_version: " + VERSION);
     H.push("# inertial_frame: " + P.frame + "; centre: " + P.centre);
     H.push("# body_fixed_frame: " + P.bodyFrame);
+    H.push("# integrator: " + (aStats ? "dop853; rtol=" + c.rtol + "; atol=" + c.atol + (c.maxStep < Infinity ? "; max_step_s=" + c.maxStep : "") + "; accepted_steps=" + aStats.steps + "; rejected_steps=" + aStats.rejected + "; shadow_events=" + aStats.events + (aStats.hMax > 0 ? "; step_s_min=" + (aStats.hMin < Infinity ? aStats.hMin : aStats.hMax).toPrecision(4) + "; step_s_max=" + aStats.hMax.toPrecision(4) : "") : "rk4; time_step_s=" + h));
     var fmArr = ["gravity"];
     if (drag) fmArr.push("drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)");
     if (srp) fmArr.push("solar radiation pressure (cannonball, P=4.56e-6 N/m\xB2 at 1 AU scaled by 1/r\xB2, cylindrical shadow)");
@@ -3246,7 +3620,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
     H.push(COLUMNS.map(function(col) {
       return col[0];
     }).join(","));
-    return { csv: H.join("\n") + "\n" + lines.join("\n") + "\n", report, rows: lines.length, steps: Math.min(c.nSteps, n), dt: h, parent: { shape: P.shape, mu: P.mu, radius: P.radius } };
+    return { csv: H.join("\n") + "\n" + lines.join("\n") + "\n", report, rows: lines.length, steps: aStats ? aStats.steps : Math.min(c.nSteps, n), dt: aStats ? null : h, integrator: aStats ? { type: "dop853", rejected: aStats.rejected, events: aStats.events, hMin: aStats.hMin, hMax: aStats.hMax } : { type: "rk4" }, parent: { shape: P.shape, mu: P.mu, radius: P.radius } };
   }
   function run(rawConfig) {
     var g = simulate(rawConfig), r;
@@ -4585,7 +4959,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
     }
     var key = [id, V.selected, CW, CH, H, dpr, V.planSeq].join("|"), lay;
     if (chartCache.key !== key) {
-      var narrow = W < 640, legW = narrow ? 0 : Math.min(280, Math.max(215, W * 0.27)), L = 72, T2 = 70, R = W - legW - (narrow ? 12 : 24), B = H - (narrow ? 64 : 46);
+      var narrow = W < 640, legW = narrow ? 0 : Math.min(280, Math.max(215, W * 0.27)), L = 72, T2 = 70, R = W - legW - (narrow ? 12 : 24), B2 = H - (narrow ? 64 : 46);
       var tEnd = V.plan.times[V.plan.times.length - 1], days = tEnd > 2 * 86400, xu = days ? 86400 : 3600, y0 = Infinity, y1 = -Infinity;
       ser.forEach(function(q) {
         [q.d.h, q.d.raw].forEach(function(arr) {
@@ -4606,7 +4980,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
       var xs = function(t) {
         return L + (R - L) * t / tEnd;
       }, ys = function(h) {
-        return B - (B - T2) * (h - y0) / (y1 - y0);
+        return B2 - (B2 - T2) * (h - y0) / (y1 - y0);
       };
       var oc = chartCache.cv || document.createElement("canvas");
       oc.width = ltCv.width;
@@ -4618,9 +4992,9 @@ button.mini { min-height: 19px; padding: 0 6px; }
       c.font = CHART_FONT;
       c.textBaseline = "middle";
       c.fillStyle = "#fff";
-      c.fillRect(L, T2, R - L, B - T2);
-      bevel(c, L - 2, T2 - 2, R - L + 4, B - T2 + 4, true);
-      var yst = sp.step((y1 - y0) / Math.max(3, (B - T2) / 45)), xst = pick(days ? [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100] : [0.25, 0.5, 1, 2, 3, 6, 12, 24], tEnd / xu / Math.max(2, (R - L) / 90)), v;
+      c.fillRect(L, T2, R - L, B2 - T2);
+      bevel(c, L - 2, T2 - 2, R - L + 4, B2 - T2 + 4, true);
+      var yst = sp.step((y1 - y0) / Math.max(3, (B2 - T2) / 45)), xst = pick(days ? [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100] : [0.25, 0.5, 1, 2, 3, 6, 12, 24], tEnd / xu / Math.max(2, (R - L) / 90)), v;
       c.lineWidth = 1;
       c.setLineDash([1, 2]);
       c.strokeStyle = "#a0a0a0";
@@ -4639,18 +5013,18 @@ button.mini { min-height: 19px; padding: 0 6px; }
         var xx = Math.round(xs(v * xu)) + 0.5;
         c.beginPath();
         c.moveTo(xx, T2);
-        c.lineTo(xx, B);
+        c.lineTo(xx, B2);
         c.stroke();
-        c.fillText(String(+v.toFixed(2)), xx, B + 12);
+        c.fillText(String(+v.toFixed(2)), xx, B2 + 12);
       }
       c.setLineDash([]);
-      c.fillText("Elapsed time (" + (days ? "days" : "hours") + ")", (L + R) / 2, B + 30);
+      c.fillText("Elapsed time (" + (days ? "days" : "hours") + ")", (L + R) / 2, B2 + 30);
       if (sp.note && !narrow) {
         c.textAlign = "right";
         c.fillText(sp.note, R, T2 - 12);
       }
       c.save();
-      c.translate(14, (T2 + B) / 2);
+      c.translate(14, (T2 + B2) / 2);
       c.rotate(-Math.PI / 2);
       c.textAlign = "center";
       c.fillText(sp.ylab(), 0, 0);
@@ -4685,7 +5059,7 @@ button.mini { min-height: 19px; padding: 0 6px; }
       };
       c.save();
       c.beginPath();
-      c.rect(L, T2, R - L, B - T2);
+      c.rect(L, T2, R - L, B2 - T2);
       c.clip();
       ser.slice().sort(function(a, b) {
         return (a.i === V.selected) - (b.i === V.selected);
@@ -4713,13 +5087,13 @@ button.mini { min-height: 19px; padding: 0 6px; }
         var bx = Math.round(xs(tb)) + 0.5;
         c.beginPath();
         c.moveTo(bx, T2);
-        c.lineTo(bx, B);
+        c.lineTo(bx, B2);
         c.stroke();
         if (n < 12) c.fillText("burn", bx + 3, T2 + 9 + n % 2 * 13);
       });
       c.setLineDash([]);
       c.restore();
-      chartCache = { key, cv: oc, lay: { narrow, L, T: T2, R, B, tEnd, y0, y1 } };
+      chartCache = { key, cv: oc, lay: { narrow, L, T: T2, R, B: B2, tEnd, y0, y1 } };
     }
     lay = chartCache.lay;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -4727,23 +5101,23 @@ button.mini { min-height: 19px; padding: 0 6px; }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.font = CHART_FONT;
     g.textBaseline = "middle";
-    var L2 = lay.L, T22 = lay.T, R2 = lay.R, B2 = lay.B, xs2 = function(t) {
+    var L2 = lay.L, T22 = lay.T, R2 = lay.R, B22 = lay.B, xs2 = function(t) {
       return L2 + (R2 - L2) * t / lay.tEnd;
     }, ys2 = function(h) {
-      return B2 - (B2 - T22) * (h - lay.y0) / (lay.y1 - lay.y0);
+      return B22 - (B22 - T22) * (h - lay.y0) / (lay.y1 - lay.y0);
     };
     var cx = Math.round(xs2(Math.min(V.simT, lay.tEnd))) + 0.5;
     g.strokeStyle = "#000080";
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(cx, T22);
-    g.lineTo(cx, B2);
+    g.lineTo(cx, B22);
     g.stroke();
     if (!sp.points) ser.forEach(function(q) {
       var d = q.d, ta = d.raw ? d.rt : d.t, ha = d.raw || d.h;
       if (V.simT > ta[ta.length - 1] + 1e-6) return;
       var py = ys2(interp(ta, ha, V.simT));
-      if (py < T22 || py > B2) return;
+      if (py < T22 || py > B22) return;
       g.fillStyle = chartColour(q.i);
       g.strokeStyle = "#000";
       g.beginPath();
@@ -4760,13 +5134,13 @@ button.mini { min-height: 19px; padding: 0 6px; }
         return q.i === V.selected;
       })[0] || ser[0];
       g.fillStyle = chartColour(qs.i);
-      g.fillRect(L2, B2 + 44, 10, 10);
+      g.fillRect(L2, B22 + 44, 10, 10);
       g.fillStyle = "#000";
       g.textAlign = "left";
-      g.fillText(qs.name + "  " + sp.now(qs.d, tNow(qs)) + "  " + sp.drift(qs.d), L2 + 16, B2 + 49);
+      g.fillText(qs.name + "  " + sp.now(qs.d, tNow(qs)) + "  " + sp.drift(qs.d), L2 + 16, B22 + 49);
       return;
     }
-    var lx = R2 + 14, lw = W - lx - 8, maxRows = Math.max(1, Math.floor((B2 - T22 - 26) / rowH)), shown = ser.slice(0, maxRows), lh = 24 + shown.length * rowH + (ser.length > maxRows ? rowH : 0) + 6;
+    var lx = R2 + 14, lw = W - lx - 8, maxRows = Math.max(1, Math.floor((B22 - T22 - 26) / rowH)), shown = ser.slice(0, maxRows), lh = 24 + shown.length * rowH + (ser.length > maxRows ? rowH : 0) + 6;
     g.fillStyle = "#c0c0c0";
     g.fillRect(lx, T22 - 2, lw, lh);
     bevel(g, lx, T22 - 2, lw, lh, false);
@@ -5026,7 +5400,8 @@ button.mini { min-height: 19px; padding: 0 6px; }
       <p><b>Time Scales:</b> The simulator's internal integrator ticks in Terrestrial Time (TT) seconds past J2000.0. User inputs supporting UTC, TAI, TT, GPS, or TDB are converted rigorously. The system bundles the standard IERS Bulletin C leap-second schedule to compute TT = UTC + <span class="math">&Delta;AT</span> + 32.184s.</p>
 
       <h2>2. Physics & Propagation (Runge-Kutta 4)</h2>
-      <p>The core uses a standard, fixed-step 4th-order Runge-Kutta (RK4) numerical integrator. The force model can be represented by the specific acceleration vector:</p>
+      <p>Two integrators are available. <b>RK4</b> (<code>"type": "rk4"</code>) is the classic fixed-step 4th-order Runge-Kutta method; output rows between steps come from cubic Hermite interpolation. <b>DOP853</b> (<code>"type": "dop853"</code>) is the Dormand&ndash;Prince 8(5,3) method with adaptive step size: each step is sized so its estimated error stays within <code>rtol</code> &times; |value| + <code>atol</code>, and output rows come from its 7th-order dense output. Steps land exactly on burn times and, with SRP on, on every shadow entry and exit, so the switch in solar pressure never falls inside a step. At rtol 1e-10 a day in LEO takes about 450 steps instead of RK4's 8,640 at 10 s, and is more accurate.</p>
+      <p>The force model can be represented by the specific acceleration vector:</p>
       <p style="text-align: center;"><span class="math"><b>a</b> = <b>a</b><sub>grav</sub> + <b>a</b><sub>drag</sub> + <b>a</b><sub>srp</sub></span></p>
       
       <h3>Gravity (<span class="math"><b>a</b><sub>grav</sub></span>)</h3>
@@ -5180,8 +5555,8 @@ button.mini { min-height: 19px; padding: 0 6px; }
         rowsT.push(["solar Cr", getCr(o.s.satCfg.cr, Math.min(V.simT, o.impact)).toFixed(3)]);
       }
       rowsT.push(["air density", S.atmosphereDensity(g.h).toExponential(2) + " kg/m\xB3"]);
-      var B = S.magneticField(rb);
-      rowsT.push(["|B| dipole", (Math.hypot(B[0], B[1], B[2]) * 1e9).toFixed(0) + " nT"]);
+      var B2 = S.magneticField(rb);
+      rowsT.push(["|B| dipole", (Math.hypot(B2[0], B2[1], B2[2]) * 1e9).toFixed(0) + " nT"]);
     }
     var box = $("telemetry");
     box.textContent = "";
@@ -5417,7 +5792,8 @@ button.mini { min-height: 19px; padding: 0 6px; }
       running = false;
       $("run").disabled = false;
       $("progress").hidden = true;
-      loadPlan(r.value.csv, "Ran " + r.value.steps + " steps of " + r.value.dt + " s in " + ((performance.now() - t0) / 1e3).toFixed(2) + " s. ");
+      var ig = r.value.integrator, what = ig && ig.type === "dop853" ? r.value.steps + " adaptive steps (" + (ig.hMin < Infinity ? +ig.hMin.toPrecision(3) + " to " : "") + +ig.hMax.toPrecision(3) + " s)" : r.value.steps + " steps of " + r.value.dt + " s";
+      loadPlan(r.value.csv, "Ran " + what + " in " + ((performance.now() - t0) / 1e3).toFixed(2) + " s. ");
     })();
   }
   function loadPlan(csv, note) {
@@ -5624,6 +6000,14 @@ button.mini { min-height: 19px; padding: 0 6px; }
     if (!c.satellites || typeof c.satellites !== "object") c.satellites = { count: 1, mass_kg: 100, orbits: [defaultOrbit(c)] };
     if (!c.integrator || typeof c.integrator !== "object") c.integrator = { type: "rk4", time_step_s: 10 };
     var earth = c.parent.shape === "earth_default", sa = c.satellites, kids;
+    var ig = c.integrator, adaptive = ig.type === "dop853";
+    var integSel = lab("Integrator", selIn([["rk4", "RK4, fixed step"], ["dop853", "DOP853, adaptive"]], adaptive ? "dop853" : "rk4", function(v) {
+      c.integrator = v === "dop853" ? { type: "dop853", rtol: 1e-10, atol: 1e-6 } : { type: "rk4", time_step_s: 10 };
+      commit(true);
+    }));
+    var stepFields = function() {
+      return adaptive ? [lab("rtol", numIn(ig, "rtol", { w: 70 })), lab("atol", numIn(ig, "atol", { w: 70 }))] : [lab("Time step (s)", numIn(ig, "time_step_s", { w: 70 }))];
+    };
     kids = [row([lab("Body", selIn([["earth_default", "Earth (WGS84, J2 to J4)"], ["sphere_uniform", "Uniform sphere"]], earth ? "earth_default" : "sphere_uniform", function(v) {
       if (v === "earth_default") c.parent = { shape: "earth_default" };
       else {
@@ -5685,12 +6069,12 @@ button.mini { min-height: 19px; padding: 0 6px; }
           unit = +v;
           setDur();
         })),
-        lab("Time step (s)", numIn(c.integrator, "time_step_s", { w: 70 })),
         lab("Output step (s)", numIn(c, "output_step_s", { w: 70 }))
       ]));
     }
-    if (c.end_epoch !== void 0) kids.push(row([lab("Time step (s)", numIn(c.integrator, "time_step_s", { w: 70 })), lab("Output step (s)", numIn(c, "output_step_s", { w: 70 }))]));
-    formRoot.appendChild(grp("Time", kids, "<b>Time &amp; Integrator Advice</b><br>\u2022 <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>\u2022 <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>\u2022 <b>Time step</b>: Fixed RK4 step (s). Must not exceed 25% of orbital period (recommended &le; period / 20)."));
+    if (c.end_epoch !== void 0) kids.push(row([lab("Output step (s)", numIn(c, "output_step_s", { w: 70 }))]));
+    kids.push(row([integSel].concat(stepFields())));
+    formRoot.appendChild(grp("Time", kids, "<b>Time &amp; Integrator Advice</b><br>\u2022 <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>\u2022 <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>\u2022 <b>RK4</b>: fixed time step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).<br>\u2022 <b>DOP853</b>: picks its own step to keep the error per step within <b>rtol</b> (fraction of the value) and <b>atol</b> (m or m/s). rtol 1e-10 is a good default; 1e-12 for reference runs. Usually faster than RK4 at the same accuracy."));
     if (earth) {
       var dragOn = !!(c.force_model && c.force_model.drag === true);
       var srpOn = !!(c.force_model && (c.force_model.srp === true || c.force_model.solar_drag === true));
