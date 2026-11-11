@@ -1,6 +1,6 @@
 # Project Wednesday
 
-by [Kshitij Khandelwal](https://kshitijkhandelwal.com).
+[Blog](https://kshitijkhandelwal.com/project-wednesday).
 
 **Live:** <https://khandelwalkshitij.github.io/project-wednesday/>
 
@@ -179,7 +179,7 @@ A run is one JSON config. Minimal example (the [config reference](docs/config-re
 
 ## Source and feedback
 
-Project Wednesday is made by Kshitij Khandelwal. More at [kshitijkhandelwal.com](https://kshitijkhandelwal.com).
+Project Wednesday was made by me with help from Claude Opus 5.5. More on my website at [kshitijkhandelwal.com](https://kshitijkhandelwal.com)
 
 The code lives at <https://github.com/khandelwalkshitij/project-wednesday>. Bugs and feature requests go in the [issue tracker](https://github.com/khandelwalkshitij/project-wednesday/issues). Releases are described in [`CHANGELOG.md`](CHANGELOG.md).
 
