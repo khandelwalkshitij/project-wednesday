@@ -5,11 +5,14 @@ import { utcNominal } from './time.js';
 import { NUT00B } from '../data/nutation-iau2000b.js';
 
 // ---------------------------------------------------------------- Earth orientation (SIM_067): IAU 2006 precession, IAU 2000B nutation, ERA
+export function fwAngles(t) {        // IAU 2006 Fukushima-Williams bias-precession angles gamma_bar, phi_bar, psi_bar [rad]; t in Julian centuries TT from J2000
+  return [(-0.052928 + (10.556378 + (0.4932044 + (-0.00031238 + (-0.000002788 + 0.0000000260 * t) * t) * t) * t) * t) * AS2R,
+    (84381.412819 + (-46.811016 + (0.0511268 + (0.00053289 + (-0.000000440 - 0.0000000176 * t) * t) * t) * t) * t) * AS2R,
+    (-0.041775 + (5038.481484 + (1.5584175 + (-0.00018522 + (-0.000026452 - 0.0000000148 * t) * t) * t) * t) * t) * AS2R];
+}
+
 export function npbMatrix(tt) {
-  var t = tt / (86400 * 36525);
-  var gamb = (-0.052928 + (10.556378 + (0.4932044 + (-0.00031238 + (-0.000002788 + 0.0000000260 * t) * t) * t) * t) * t) * AS2R;
-  var phib = (84381.412819 + (-46.811016 + (0.0511268 + (0.00053289 + (-0.000000440 - 0.0000000176 * t) * t) * t) * t) * t) * AS2R;
-  var psib = (-0.041775 + (5038.481484 + (1.5584175 + (-0.00018522 + (-0.000026452 - 0.0000000148 * t) * t) * t) * t) * t) * AS2R;
+  var t = tt / (86400 * 36525), fw = fwAngles(t), gamb = fw[0], phib = fw[1], psib = fw[2];
   var epsa = (84381.406 + (-46.836769 + (-0.0001831 + (0.00200340 + (-0.000000576 - 0.0000000434 * t) * t) * t) * t) * t) * AS2R;
   var el = ((485868.249036 + 1717915923.2178 * t) % TURNAS) * AS2R, elp = ((1287104.79305 + 129596581.0481 * t) % TURNAS) * AS2R,
     f = ((335779.526232 + 1739527262.8478 * t) % TURNAS) * AS2R, d = ((1072260.70369 + 1602961601.2090 * t) % TURNAS) * AS2R,

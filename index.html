@@ -35,18 +35,20 @@
         <summary>Edit config as JSON <span class="info-btn" tabindex="0" role="button" aria-label="JSON Help" data-tip="<b>JSON Configuration</b><br>Directly edit the complete simulation schema. This allows advanced configurations such as epoch-varying SRP coefficient schedules (e.g. <code>&quot;cr&quot;: [[0, 2.0], [86400, 1.4]]</code>), Cartesian velocity vectors, or customized constellation spacing.">?</span></summary>
         <textarea id="config" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
         <dl class="ref">
-          <dt>parent.shape</dt><dd><code>"earth_default"</code> (no other inputs) or <code>"sphere_uniform"</code> with <code>radius_m</code>, <code>density_kg_m3</code> and <code>rotation</code>: <code>spin_period_s</code>, <code>pole_ra_deg</code>, <code>pole_dec_deg</code>, <code>prime_meridian_deg</code>.</dd>
-          <dt>start_epoch</dt><dd><code>"YYYY-MM-DDThh:mm:ss.sss SCALE"</code>, SCALE one of UTC, TAI, TT, TDB, GPS.</dd>
-          <dt>duration <em>or</em> end_epoch</dt><dd>Seconds, or an ISO 8601 duration such as <code>"P1DT6H"</code>. Or an end epoch in the start_epoch format. Not both.</dd>
-          <dt>integrator</dt><dd><code>{"type": "rk4", "time_step_s": 10}</code></dd>
-          <dt>output_step_s</dt><dd>Spacing of rows in plan.csv. Independent of the integration step.</dd>
-          <dt>satellites</dt><dd><code>count</code> (1 to 100), <code>mass_kg</code> (up to 10000), <code>names</code> (list) or <code>name_prefix</code>, and <code>orbits</code>: one entry per satellite.</dd>
-          <dt>orbits[ ]</dt><dd><code>{"type": "keplerian", "a_m", "e", "i_deg", "raan_deg", "argp_deg", "ta_deg"}</code> (osculating, inertial frame) or <code>{"type": "cartesian", "r_m": [x, y, z], "v_m_s": [vx, vy, vz]}</code>.</dd>
-          <dt>earth_orientation.dut1_s</dt><dd>Optional UT1 minus UTC in seconds for Earth. Default 0.</dd>
-          <dt>force_model</dt><dd><code>{"drag": true, "srp": true}</code> turns on atmospheric drag and/or solar radiation pressure for Earth (<code>"solar_drag"</code> is accepted as another name for <code>"srp"</code>). Needs <code>satellites.area_m2</code>; <code>satellites.cd</code> defaults to 2.2, <code>satellites.cr</code> defaults to 1.8. Each orbit entry may override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>.</dd>
-          <dt>satellites.pattern</dt><dd>Use in place of <code>orbits</code>. <code>{"type": "walker", "a_m", "i_deg", "t", "p", "f"}</code> or <code>{"type": "train", "base": {Keplerian orbit}, "offset": {"along_track_m" | "ta_deg" | "raan_deg"}}</code> with <code>count</code>.</dd>
-          <dt>orbits[ ] from a TLE</dt><dd><code>{"type": "tle", "line1": "1 ...", "line2": "2 ..."}</code>. Approximate.</dd>
-          <dt>maneuvers[ ]</dt><dd><code>{"sat": name, "t_s" or "epoch", "dv_m_s": [a, b, c], "frame": "lvlh" | "inertial"}</code>. For lvlh the three numbers are radial, along-track, cross-track.</dd>
+          <!-- config-fields:start: generated from docs/config-reference.md by tools/build-docs.mjs -->
+          <dt><code>parent</code></dt><dd>Required. <code>{"shape": "earth_default"}</code>, or <code>{"shape": "sphere_uniform", "radius_m", "density_kg_m3", "rotation": {...}}</code> for a uniform body. <a href="#config-reference--parent" data-doc>Details</a></dd>
+          <dt><code>earth_orientation.dut1_s</code></dt><dd>Optional, Earth only. UT1 minus UTC in seconds, -0.9 to 0.9. Default 0.</dd>
+          <dt><code>start_epoch</code></dt><dd>Required. <code>"YYYY-MM-DDThh:mm:ss.sss SCALE"</code>, SCALE one of UTC, TAI, TT, TDB, GPS.</dd>
+          <dt><code>duration</code> or <code>end_epoch</code></dt><dd>One of them. Seconds, or an ISO 8601 duration such as <code>"P1DT6H"</code>; or an end epoch in the start_epoch format.</dd>
+          <dt><code>integrator</code></dt><dd>Required. <code>{"type": "rk4", "time_step_s": 10}</code> (fixed step) or <code>{"type": "dop853", "rtol": 1e-10, "atol": 1e-6}</code> (adaptive; optional <code>max_step_s</code>, <code>initial_step_s</code>). <a href="#config-reference--integrator" data-doc>Details</a></dd>
+          <dt><code>output_step_s</code></dt><dd>Required. Spacing of rows in plan.csv, independent of the integration step.</dd>
+          <dt><code>force_model</code></dt><dd>Optional; gravity is always on. <code>"gravity_only"</code>, or an object with <code>drag</code>, <code>srp</code>, <code>third_body</code>, <code>atmosphere</code>, <code>space_weather</code>. <a href="#config-reference--force_model" data-doc>Details</a></dd>
+          <dt><code>satellites</code></dt><dd>Required. <code>count</code>, <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>, <code>names</code> or <code>name_prefix</code>, and <code>orbits</code> or <code>pattern</code>. <a href="#config-reference--satellites" data-doc>Details</a></dd>
+          <dt><code>satellites.orbits[ ]</code></dt><dd>One per satellite: <code>"keplerian"</code>, <code>"cartesian"</code> or <code>"tle"</code>, each able to override <code>mass_kg</code>, <code>cd</code>, <code>cr</code>, <code>area_m2</code>. <a href="#config-reference--orbits" data-doc>Details</a></dd>
+          <dt><code>satellites.pattern</code></dt><dd>Instead of <code>orbits</code>: a Walker constellation or a train. <a href="#config-reference--pattern" data-doc>Details</a></dd>
+          <dt><code>maneuvers[ ]</code></dt><dd>Optional impulsive burns: <code>{"sat", "t_s" or "epoch", "dv_m_s": [a, b, c], "frame": "lvlh" or "inertial"}</code>. <a href="#config-reference--maneuvers" data-doc>Details</a></dd>
+          <dt>More</dt><dd>Every field, with examples, and the plan.csv format: <a href="#config-reference" data-doc>Documentation tab, Config reference</a>.</dd>
+          <!-- config-fields:end -->
         </dl>
       </details>
     </section>

@@ -107,6 +107,11 @@ export function renderForm() {
   if (!c.satellites || typeof c.satellites !== 'object') c.satellites = { count: 1, mass_kg: 100, orbits: [defaultOrbit(c)] };
   if (!c.integrator || typeof c.integrator !== 'object') c.integrator = { type: 'rk4', time_step_s: 10 };
   var earth = c.parent.shape === 'earth_default', sa = c.satellites, kids;
+  var ig = c.integrator, adaptive = ig.type === 'dop853';
+  var integSel = lab('Integrator', selIn([['rk4', 'RK4, fixed step'], ['dop853', 'DOP853, adaptive']], adaptive ? 'dop853' : 'rk4', function (v) {
+    c.integrator = v === 'dop853' ? { type: 'dop853', rtol: 1e-10, atol: 1e-6 } : { type: 'rk4', time_step_s: 10 }; commit(true);
+  }));
+  var stepFields = function () { return adaptive ? [lab('rtol', numIn(ig, 'rtol', { w: 70 })), lab('atol', numIn(ig, 'atol', { w: 70 }))] : [lab('Time step (s)', numIn(ig, 'time_step_s', { w: 70 }))]; };
   // parent
   kids = [row([lab('Body', selIn([['earth_default', 'Earth (WGS84, J2 to J4)'], ['sphere_uniform', 'Uniform sphere']], earth ? 'earth_default' : 'sphere_uniform', function (v) {
     if (v === 'earth_default') c.parent = { shape: 'earth_default' };
@@ -130,10 +135,13 @@ export function renderForm() {
     var setDur = function () { var x = parseFloat(dv.value); if (isFinite(x) && x > 0) { c.duration = +(x * unit).toPrecision(15); commit(); } };
     dv.addEventListener('change', setDur);
     kids.push(row([lab('Duration', dv), lab('Unit', selIn([[86400, 'days'], [3600, 'hours'], [60, 'minutes'], [1, 'seconds']], unit, function (v) { unit = +v; setDur(); })),
-      lab('Time step (s)', numIn(c.integrator, 'time_step_s', { w: 70 })), lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
+      lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
   }
-  if (c.end_epoch !== undefined) kids.push(row([lab('Time step (s)', numIn(c.integrator, 'time_step_s', { w: 70 })), lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
-  formRoot.appendChild(grp('Time', kids, '<b>Time &amp; Integrator Advice</b><br>• <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>• <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>• <b>Time step</b>: Fixed RK4 step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).'));
+  if (c.end_epoch !== undefined) kids.push(row([lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
+  kids.push(row([integSel].concat(stepFields())));
+  var stepHelp = mk('a', { href: '#accuracy--choosing-a-step', text: 'Which step or tolerance? Accuracy and limits', cls: 'doclink' }); stepHelp.setAttribute('data-doc', '');
+  kids.push(row([stepHelp]));
+  formRoot.appendChild(grp('Time', kids, '<b>Time &amp; Integrator Advice</b><br>• <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>• <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>• <b>RK4</b>: fixed time step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).<br>• <b>DOP853</b>: picks its own step to keep the error per step within <b>rtol</b> (fraction of the value) and <b>atol</b> (m or m/s). rtol 1e-10 is a good default; 1e-12 for reference runs. Usually faster than RK4 at the same accuracy.'));
   // forces
   if (earth) {
     var dragOn = !!(c.force_model && c.force_model.drag === true);
@@ -153,8 +161,8 @@ export function renderForm() {
           if (sa.area_m2 === undefined) sa.area_m2 = 1;
         }
       } else {
-        delete c.force_model.drag;
-        if (!c.force_model.srp && !c.force_model.solar_drag) delete c.force_model;
+        delete c.force_model.drag; delete c.force_model.atmosphere; delete c.force_model.space_weather;
+        if (!Object.keys(c.force_model).length) delete c.force_model;
       }
       commit(true);
     });
@@ -176,15 +184,37 @@ export function renderForm() {
       } else {
         delete c.force_model.srp;
         delete c.force_model.solar_drag;
-        if (!c.force_model.drag) delete c.force_model;
+        if (!Object.keys(c.force_model).length) delete c.force_model;
       }
+      commit(true);
+    });
+    var cbTb = mk('input', { type: 'checkbox', checked: !!(c.force_model && c.force_model.third_body === true) });
+    cbTb.addEventListener('change', function () {
+      if (!c.force_model || typeof c.force_model !== 'object') c.force_model = {};
+      if (cbTb.checked) c.force_model.third_body = true; else delete c.force_model.third_body;
+      if (!Object.keys(c.force_model).length) delete c.force_model;
       commit(true);
     });
     var fkids = [
       mk('label', { cls: 'ff inl' }, [cbDrag, mk('span', { text: 'Atmospheric drag' })]),
-      mk('label', { cls: 'ff inl' }, [cbSrp, mk('span', { text: 'Solar radiation pressure (SRP)' })])
+      mk('label', { cls: 'ff inl' }, [cbSrp, mk('span', { text: 'Solar radiation pressure (SRP)' })]),
+      mk('label', { cls: 'ff inl' }, [cbTb, mk('span', { text: 'Sun and Moon gravity' })])
     ];
-    formRoot.appendChild(grp('Forces (gravity is always on)', [row(fkids)], '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
+    var frows = [row(fkids)];
+    if (dragOn) {
+      var fmo = c.force_model, isMsis = fmo.atmosphere === 'nrlmsise00', swFix = isMsis && fmo.space_weather && typeof fmo.space_weather === 'object';
+      var arow = [lab('Atmosphere', selIn([['exponential', 'Exponential (no solar activity)'], ['nrlmsise00', 'NRLMSISE-00 (solar activity)']], isMsis ? 'nrlmsise00' : 'exponential', function (v) {
+        if (v === 'nrlmsise00') fmo.atmosphere = 'nrlmsise00'; else { delete fmo.atmosphere; delete fmo.space_weather; } commit(true);
+      }))];
+      if (isMsis) {
+        var cbSw = mk('input', { type: 'checkbox', checked: !!swFix });
+        cbSw.addEventListener('change', function () { if (cbSw.checked) fmo.space_weather = { f107: 150, f107a: 150, ap: 15 }; else delete fmo.space_weather; commit(true); });
+        arow.push(mk('label', { cls: 'ff inl' }, [cbSw, mk('span', { text: 'Fixed space weather' })]));
+        if (swFix) arow.push(lab('F10.7', numIn(fmo.space_weather, 'f107', { w: 55 })), lab('F10.7 81-day', numIn(fmo.space_weather, 'f107a', { w: 55 })), lab('Ap', numIn(fmo.space_weather, 'ap', { w: 45 })));
+      }
+      frows.push(row(arow));
+    }
+    formRoot.appendChild(grp('Forces (gravity is always on)', frows, '<b>Forces Advice</b><br>• <b>Atmospheric drag</b>: Aerodynamic deceleration through Earth co-rotating atmosphere (active below 1,500 km).<br>• <b>Solar radiation pressure (SRP)</b>: Solar radiation pressure force directed away from the Sun, with automatic Earth shadow cutoff.<br>• <b>Atmosphere</b>: the exponential table is a fixed, moderate-activity profile. <b>NRLMSISE-00</b> follows solar flux (F10.7) and geomagnetic activity (Ap) from a bundled CelesTrak table (measured to mid-2025, predicted after), or from fixed values you enter. Drag can change tenfold over the solar cycle.<br>• <b>Sun and Moon gravity</b>: third-body pull of the Sun and Moon as point masses. Tens to hundreds of metres a day in LEO; the main perturbation in GEO (inclination grows about 0.75 to 0.95° a year).<br><br><i>Note: Spacecraft ballistic and optical properties (Cd, Cr, Area) are configured under <b>Satellites</b>.</i>'));
   }
   // satellites
   var mode = sa.pattern && typeof sa.pattern === 'object' ? (sa.pattern.type === 'train' ? 'train' : 'walker') : 'list';
@@ -295,7 +325,7 @@ export function tleDialog() {
   }, 'primary');
   var dlg = mk('div', { id: 'dlg' }, [mk('div', { cls: 'window' }, [mk('div', { cls: 'title-bar', text: 'Import TLE' }), mk('div', { cls: 'dbody' }, [ta,
     mk('label', { cls: 'ff inl' }, [cbE, mk('span', { text: 'Set the start epoch to the TLE epoch' })]), mk('label', { cls: 'ff inl' }, [cbR, mk('span', { text: 'Replace the current satellites' })]),
-    mk('p', { cls: 'muted', text: 'Approximate: TLEs hold averaged elements. Expect errors of about 10 to 20 km in low orbit, more for very eccentric orbits.' }), err, row([ok, btn('Cancel', close)])])])]);
+    mk('p', { cls: 'muted', text: 'The TLE is propagated to start_epoch with SGP4 (SDP4 for periods of 225 minutes or more). From there the simulator uses its own force model, so it drifts from SGP4 over time.' }), err, row([ok, btn('Cancel', close)])])])]);
   document.body.appendChild(dlg); ta.focus();
 }
 

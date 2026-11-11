@@ -64,9 +64,22 @@ const Eof = (q, t) => { const s = q.slice(3, 9).map(Number); return (s[3] ** 2 +
 
 // ---- TLE import
 { const T = fixture('tle_truth.json'); let ok = true; const out = [];
-  for (const t of T) { const tle = S.parseTle(t.l1, t.l2); const e = t.truth.map(q => { const s = S.tleState(tle, tle.tt + q.dt_s); return Math.hypot(s[0] - q.r[0], s[1] - q.r[1], s[2] - q.r[2]) / 1000; });
-    out.push(t.name + ' ' + e.map(x => x.toFixed(1)).join(' / ') + ' km'); ok = ok && e[0] < (tle.e > 0.1 ? 100 : 25) && e[1] < (tle.e > 0.1 ? 100 : 25); }
-  check('TLE', 'state from a TLE vs SGP4 (TEME -> GCRF with ERFA), at epoch / one day later: under 25 km in LEO, under 100 km for Molniya', ok, out.join('; '));
+  for (const t of T) { const tle = S.parseTle(t.l1, t.l2); const e = t.truth.map(q => { const s = S.tleState(tle, tle.tt + q.dt_s);
+      return [Math.hypot(s[0] - q.r[0], s[1] - q.r[1], s[2] - q.r[2]), Math.hypot(s[3] - q.v[0], s[4] - q.v[1], s[5] - q.v[2])]; });
+    out.push(t.name + ' ' + e.map(x => x[0].toFixed(3) + ' m, ' + x[1].toFixed(5) + ' m/s').join(' / ')); ok = ok && e.every(x => x[0] < 1 && x[1] < 1e-3); }
+  check('TLE', 'state from a TLE vs SGP4 (TEME -> GCRF with ERFA), at epoch / one day later: under 1 m and 1 mm/s', ok, out.join('; '));
+  // Vallado's SGP4 verification vectors (SGP4-VER.TLE / tcppver.out), TEME km and km/s: 00005 near-Earth, 11801 deep-space (SDP4)
+  const V = [
+    ['1 00005U 58002B   00179.78495062  .00000023  00000-0  28098-4 0  4753', '2 00005  34.2682 348.7242 1859667 331.7664  19.3264 10.82419157413667',
+      [[0, [7022.46529266, -1400.08296755, 0.03995155], [1.893841015, 6.405893759, 4.534807250]], [360, [-7154.03120202, -3783.17682504, -3536.19412294], [4.741887409, -4.151817765, -2.093935425]],
+       [720, [-7134.59340119, 6531.68641334, 3260.27186483], [-4.113793027, -2.911922039, -2.557327851]]]],
+    ['1 11801U          80230.29629788  .01431103  00000-0  14311-1 0    13', '2 11801  46.7916 230.4354 7318036  47.4722  10.4117  2.28537848    13',
+      [[0, [7473.37102491, 428.94748312, 5828.74846783], null]]]];
+  let vok = true; const vout = [];
+  for (const [l1, l2, rows] of V) { const sr = S.parseTle(l1, l2).satrec;
+    for (const [m, r, v] of rows) { const p = S.sgp4(sr, m), dr = Math.hypot(p.position.x - r[0], p.position.y - r[1], p.position.z - r[2]) * 1000, dv = v ? Math.hypot(p.velocity.x - v[0], p.velocity.y - v[1], p.velocity.z - v[2]) * 1000 : 0;
+      vout.push(l1.substr(2, 5) + '@' + m + ' ' + dr.toExponential(1) + ' m'); vok = vok && dr < 1e-4 && dv < 1e-5; } }
+  check('TLE', 'SGP4/SDP4 port reproduces Vallado\'s verification vectors to 0.1 mm', vok, vout.join('; '));
   const c = clone(base); c.start_epoch = S.formatUtc(S.parseTle(T[0].l1, T[0].l2).tt).replace('Z', ' UTC'); c.satellites.orbits = [{ type: 'tle', line1: T[0].l1, line2: T[0].l2 }];
   const n = S.normalizeConfig(c), el = S.stateToKep(S.EARTH.mu, n.sats[0].state), r = S.run(c);
   check('TLE', 'a "tle" orbit runs; elements are sensible', Math.abs(el.i / D - 51.64) < 0.2 && el.a > RE + 380e3 && el.a < RE + 440e3 && r.rows === 1441, 'a ' + ((el.a - RE) / 1000).toFixed(1) + ' km above R, i ' + (el.i / D).toFixed(3));

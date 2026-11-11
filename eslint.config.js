@@ -1,7 +1,7 @@
 import globals from 'globals';
 
 export default [
-  { ignores: ['dist/', 'node_modules/', 'src/data/'] },
+  { ignores: ['dist/', 'node_modules/', 'src/data/', 'src/vendor/'] },
   {
     files: ['src/**/*.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.browser, THREE: 'readonly' } },

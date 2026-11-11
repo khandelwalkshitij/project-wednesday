@@ -21,7 +21,8 @@ export function telemetry() {
     if (V.plan.srp && o.s.satCfg && o.s.satCfg.cr) {
       rowsT.push(['solar Cr', getCr(o.s.satCfg.cr, Math.min(V.simT, o.impact)).toFixed(3)]);
     }
-    rowsT.push(['air density', S.atmosphereDensity(g.h).toExponential(2) + ' kg/m³']);
+    var tNow = V.plan.tt0 + Math.min(V.simT, o.impact), rhoNow = V.plan.atmosphere === 'nrlmsise00' ? S.msisDensity(tNow, g.lat, g.lon, g.h, V.plan.spaceWeather) : S.atmosphereDensity(g.h);
+    rowsT.push([V.plan.atmosphere === 'nrlmsise00' ? 'air density (MSIS)' : 'air density', rhoNow.toExponential(2) + ' kg/m³']);
     var B = S.magneticField(rb);
     rowsT.push(['|B| dipole', (Math.hypot(B[0], B[1], B[2]) * 1e9).toFixed(0) + ' nT']);
   }

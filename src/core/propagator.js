@@ -1,16 +1,23 @@
-// Fixed-step RK4 propagation with drag, SRP, burns, impacts and re-entry. Writes plan.csv.
+// Propagation with drag, SRP, burns, impacts and re-entry: fixed-step RK4 or adaptive DOP853. Writes plan.csv.
 import { REENTRY_ALT, normalizeConfig } from './config.js';
-import { EARTH, R2D, TWO_PI, VERSION } from './constants.js';
+import { AU, EARTH, GM_MOON, GM_SUN, LIMITS, R2D, TWO_PI, VERSION } from './constants.js';
 import { getCr } from './cr-schedule.js';
+import { Dop853 } from './dop853.js';
 import { earthRotation, poleRaDec, primeMeridianAngle } from './earth-orientation.js';
 import { stateToKep } from './elements.js';
 import { ATMO, atmosphereDensity, geoHeight, geodetic } from './environment.js';
+import { msisAt } from './atmosphere.js';
+import { PD, PDM, PT } from '../data/nrlmsise00-data.js';
+import { MOON_B, MOON_LR } from '../data/moon98-series.js';
+import { SW_DAILY } from '../data/space-weather.js';
+import { spaceWeather, spaceWeatherVersion } from './space-weather.js';
 import { hermite } from './interp.js';
 import { fitLine, fmtHms, ltanFromMatrix, unwrapHours } from './ltan.js';
-import { crc32, mvec } from './math.js';
+import { crc32, mmul, mvec, rotZ } from './math.js';
+import { moonPosition } from './moon.js';
 import { makeParent } from './parent.js';
 import { inShadow, sunDirection, sunDistanceAu } from './sun.js';
-import { formatUtc, leap } from './time.js';
+import { formatUtc, leap, utcNominal } from './time.js';
 import { NUT00B } from '../data/nutation-iau2000b.js';
 import { TDB_TERMS } from '../data/tdb-series.js';
 
@@ -19,31 +26,44 @@ export var COLUMNS = [['sat_name', '-', '-'], ['epoch_utc', 'ISO 8601, UTC', '-'
   ['vx_m_s', 'm/s', 'inertial'], ['vy_m_s', 'm/s', 'inertial'], ['vz_m_s', 'm/s', 'inertial'], ['parent_rot_deg', 'deg', 'prime meridian angle W about the parent pole'],
   ['in_shadow', '1 in Earth shadow (cylindrical) / 0 sunlit / blank when no Sun is modelled', '-']];
 
+var CRC_CACHE = {};
+function dataCrc(name, text) { if (!(name in CRC_CACHE)) CRC_CACHE[name] = crc32(text()); return CRC_CACHE[name]; }
+
 export function fmtT(t) { return String(Math.round(t * 1e6) / 1e6); }
 
 export function* simulate(rawConfig) {
-  var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === 'earth_default', drag = c.drag, srp = c.srp, P_SRP = 4.560e-6;
+  var c = normalizeConfig(rawConfig), P = makeParent(c.parent), N = c.sats.length, h = c.dt, tt0 = c.epoch.tt, eps = 1e-9 * h, isE = P.shape === 'earth_default', drag = c.drag, srp = c.srp, tb3 = c.thirdBody && isE, P_SRP = 4.560e-6;
   var F = function (n) { return new Float64Array(n); };
   var y = F(6 * N), yn = F(6 * N), f0 = F(6 * N), f1 = F(6 * N), k2 = F(6), k3 = F(6), k4 = F(6), tmp = F(6), pw0 = F(N), pw1 = F(N), W = F(N), EB = F(N), JB = F(N), dvT = F(N);
   var bc = c.sats.map(function (s) { return drag ? 0.5 * s.cd * s.area / s.mass : 0; }), bi = new Int32Array(N), segList = new Array(N), impS = new Array(N);
   var alive = [], tImp = F(N), E0 = F(N), J0 = F(N), dE = F(N), dJ = F(N), impacts = [], lines = [], LT = [];
   var ra = EARTH.a + REENTRY_ALT, rb2 = EARTH.a * (1 - EARTH.f) + REENTRY_ALT;
   function surf(x, yy, z, p) { if (!drag) return P.surface(x, yy, z, p); var zz = x * p[0] + yy * p[1] + z * p[2]; return Math.sqrt((x * x + yy * yy + z * z - zz * zz) / (ra * ra) + zz * zz / (rb2 * rb2)) - 1; }
-  // derivative of one satellite's state; returns non-gravitational power per unit mass [W/kg] (0 without drag/srp)
-  function deriv(s, so, p, out, oo, b, satObj, t, sd) {
+  // derivative of one satellite's state; returns non-gravitational power per unit mass [W/kg] (0 without drag/srp).
+  // lit, when given, overrides the shadow test (the adaptive path holds it fixed across a step)
+  function deriv(s, so, p, out, oo, b, satObj, t, sd, lit) {
     var x = s[so], yy = s[so + 1], z = s[so + 2], vx = s[so + 3], vy = s[so + 4], vz = s[so + 5];
     out[oo] = vx; out[oo + 1] = vy; out[oo + 2] = vz; P.accel(x, yy, z, p, out, oo + 3);
     var pwr = 0;
+    if (tb3) {           // Sun and Moon as point masses: direct pull on the satellite minus their pull on the Earth
+      var q = bodiesAt(t), tax = 0, tay = 0, taz = 0;
+      for (var bo = 0; bo < 6; bo += 3) {
+        var gm = bo ? GM_MOON : GM_SUN, bx = q[bo], by = q[bo + 1], bz = q[bo + 2], dx = bx - x, dy = by - yy, dz = bz - z;
+        var dd = dx * dx + dy * dy + dz * dz, d3 = dd * Math.sqrt(dd), rr = bx * bx + by * by + bz * bz, r3 = rr * Math.sqrt(rr);
+        tax += gm * (dx / d3 - bx / r3); tay += gm * (dy / d3 - by / r3); taz += gm * (dz / d3 - bz / r3);
+      }
+      out[oo + 3] += tax; out[oo + 4] += tay; out[oo + 5] += taz; pwr += tax * vx + tay * vy + taz * vz;
+    }
     if (b) {
       var zz = x * p[0] + yy * p[1] + z * p[2], hgt = geoHeight(Math.sqrt(Math.max(0, x * x + yy * yy + z * z - zz * zz)), zz);
       if (hgt <= 1.5e6) {
         var w = EARTH.omega, rx = vx - w * (p[1] * z - p[2] * yy), ry = vy - w * (p[2] * x - p[0] * z), rz = vz - w * (p[0] * yy - p[1] * x);   // velocity relative to the co-rotating air
-        var k = -b * atmosphereDensity(hgt) * Math.sqrt(rx * rx + ry * ry + rz * rz);
+        var k = -b * densityAt(t, x, yy, z, hgt) * Math.sqrt(rx * rx + ry * ry + rz * rz);
         out[oo + 3] += k * rx; out[oo + 4] += k * ry; out[oo + 5] += k * rz;
         pwr += k * (rx * vx + ry * vy + rz * vz);
       }
     }
-    if (srp && satObj && satObj.area && sd && !inShadow(x, yy, z, sd, EARTH.a)) {
+    if (srp && satObj && satObj.area && sd && (lit === undefined ? !inShadow(x, yy, z, sd, EARTH.a) : lit)) {
       var crVal = getCr(satObj.cr, t);
       var au = sunDistanceAu(tt0 + t), srp_k = P_SRP * crVal * satObj.area / satObj.mass / (au * au);   // P_SRP is at 1 AU
       var ax = -srp_k * sd[0], ay = -srp_k * sd[1], az = -srp_k * sd[2];
@@ -89,6 +109,124 @@ export function* simulate(rawConfig) {
     var v = ltanFromMatrix(M, arr.subarray(off, off + 6), tt0 + t, P.dut1); if (isNaN(v)) return;
     var L = LT[i]; if (L.h.length) v = unwrapHours(L.h[L.h.length - 1], v); L.t.push(t); L.h.push(v);
   }
+
+  // ---------------------------------------------------------------- adaptive DOP853 (SIM_017). Satellites do not interact, so each gets its own
+  // step sequence; rows come from the 7th-order dense output and are written in the same time order as the RK4 path.
+  // ---------------------------------------------------------------- atmosphere: exponential table, or NRLMSISE-00 with space weather
+  // Space weather is piecewise constant over 3-hour UTC slots. The adaptive path stops each step at a slot boundary and holds the slot
+  // (swLock) for the whole step, for the same reason as the shadow switch below.
+  var swo = c.spaceWeather || {}, swFixed = swo.f107 !== undefined && swo.f107a !== undefined && swo.ap !== undefined;
+  var msis = drag && c.atmosphere === 'nrlmsise00', swVaries = msis && !swFixed, swLock = null, c2iTab = null, swKey = NaN, swNow = null;
+  function c2iAt(t) {        // GCRF -> CIRS (precession-nutation, no Earth rotation) on a 60 s grid; Earth rotation is applied exactly per call
+    var u = t / 60, j = Math.max(0, Math.floor(u)), s = u - j, q, k, out = new Array(9);
+    if (!c2iTab) { c2iTab = F(9 * (Math.ceil(c.duration / 60) + 3)); c2iTab.fill(NaN); }
+    for (q = j; q <= j + 1; q++) if (isNaN(c2iTab[9 * q])) { var er = earthRotation(tt0 + q * 60, P.dut1), m = mmul(rotZ(-er.era), er.M); for (k = 0; k < 9; k++) c2iTab[9 * q + k] = m[k]; }
+    for (k = 0; k < 9; k++) out[k] = c2iTab[9 * j + k] + s * (c2iTab[9 * j + 9 + k] - c2iTab[9 * j + k]);
+    return out;
+  }
+  function densityAt(t, x, yy, z, hgt) {
+    if (!msis) return atmosphereDensity(hgt);
+    var utc = utcNominal(tt0 + t), m = c2iAt(t), bx = m[0] * x + m[1] * yy + m[2] * z, by = m[3] * x + m[4] * yy + m[5] * z, bz = m[6] * x + m[7] * yy + m[8] * z;
+    var g = geodetic(bx, by, bz, EARTH.a, EARTH.f), tu = (utc + (P.dut1 || 0)) / 86400, era = TWO_PI * ((tu % 1 + 1) % 1 + 0.7790572732640 + 0.00273781191135448 * tu);
+    var lon = ((g.lon - era) * R2D % 360 + 540) % 360 - 180, key = swLock !== null ? swLock : Math.floor((utc + 43200) / 10800);
+    if (key !== swKey) { swKey = key; swNow = spaceWeather(key * 10800 - 43200 + 1e-3, c.spaceWeather); }
+    return msisAt(utc, g.lat * R2D, lon, g.h / 1000, swNow);
+  }
+  var POLE_DT = 60, poleTab = null, BODY_DT = 60, bodyTab = null, bodyOut = F(6);
+  function bodiesAt(t) {     // Sun and Moon GCRF positions [m] on a 60 s grid, linearly interpolated (Moon ~1 m, Sun ~3 m off; both far below the models' own error)
+    var u = t / BODY_DT, j = Math.max(0, Math.floor(u)), s = u - j, q, k;
+    if (!bodyTab) { bodyTab = F(6 * (Math.ceil(c.duration / BODY_DT) + 3)); bodyTab.fill(NaN); }
+    for (q = j; q <= j + 1; q++) if (isNaN(bodyTab[6 * q])) {
+      var tq = tt0 + q * BODY_DT, sd = sunDirection(tq), au = sunDistanceAu(tq) * AU, m = moonPosition(tq);
+      bodyTab[6 * q] = sd[0] * au; bodyTab[6 * q + 1] = sd[1] * au; bodyTab[6 * q + 2] = sd[2] * au; bodyTab[6 * q + 3] = m[0]; bodyTab[6 * q + 4] = m[1]; bodyTab[6 * q + 5] = m[2];
+    }
+    for (k = 0; k < 6; k++) bodyOut[k] = bodyTab[6 * j + k] + s * (bodyTab[6 * j + 6 + k] - bodyTab[6 * j + k]);
+    return bodyOut;
+  }
+  function poleFast(t) {        // parent pole on a 60 s grid, linearly interpolated (error ~1e-14 rad for Earth); poleAt at all 12 stages would dominate the run time
+    var u = t / POLE_DT, j = Math.max(0, Math.floor(u)), s = u - j, a = 3 * j, q;
+    if (!poleTab) { poleTab = F(3 * (Math.ceil(c.duration / POLE_DT) + 3)); poleTab.fill(NaN); }
+    for (q = j; q <= j + 1; q++) if (isNaN(poleTab[3 * q])) { var pq = P.poleAt(tt0 + q * POLE_DT); poleTab[3 * q] = pq[0]; poleTab[3 * q + 1] = pq[1]; poleTab[3 * q + 2] = pq[2]; }
+    var x = poleTab[a] + s * (poleTab[a + 3] - poleTab[a]), yy = poleTab[a + 1] + s * (poleTab[a + 4] - poleTab[a + 1]), z = poleTab[a + 2] + s * (poleTab[a + 5] - poleTab[a + 2]), r = Math.sqrt(x * x + yy * yy + z * z);
+    return [x / r, yy / r, z / r];
+  }
+  function* runAdaptive() {
+    var dur = c.duration, nOut = c.nOut, epsA = 1e-7, outS = [], nValid = new Int32Array(N), o7 = F(7), st, stats = { steps: 0, rejected: 0, events: 0, hMin: Infinity, hMax: 0 };
+    function burnsAt(i, t, bl, bj) {      // apply every burn due at time t; returns the next burn index
+      while (bj < bl.length && bl[bj].t <= t + epsA && bl[bj].t < dur - epsA) {
+        var B = bl[bj++], pq = poleFast(t), e1 = energy(st.y, 0, pq); applyBurn(st.y, B); var e2 = energy(st.y, 0, pq);
+        EB[i] += e2[0] - e1[0]; JB[i] += e2[1] - e1[1]; dvT[i] += Math.hypot(B.dv[0], B.dv[1], B.dv[2]); st.reset();
+      }
+      return bj;
+    }
+    function impactIn(i) {               // surface (or re-entry shell) crossing inside the last step, located on the dense output
+      var ta = st.tOld, hh = st.h, q, x, lo = 0, hi = -1;
+      if (Math.min(surf(st.yOld[0], st.yOld[1], st.yOld[2], poleFast(ta)), surf(st.y[0], st.y[1], st.y[2], poleFast(ta + hh))) > 0.1) return Infinity;
+      for (q = 1; q <= 8 && hi < 0; q++) { x = q / 8; st.dense(ta + x * hh, o7); if (surf(o7[0], o7[1], o7[2], poleFast(ta + x * hh)) <= 0) { hi = x; lo = (q - 1) / 8; } }
+      if (hi < 0) return Infinity;
+      for (q = 0; q < 50; q++) { x = 0.5 * (lo + hi); st.dense(ta + x * hh, o7); if (surf(o7[0], o7[1], o7[2], poleFast(ta + x * hh)) <= 0) hi = x; else lo = x; }
+      st.dense(ta + hi * hh, o7); impS[i] = Array.from(o7.subarray(0, 6)); return ta + hi * hh;
+    }
+    // SRP switches off in the shadow. The lit/shadow state is held fixed for the whole of a step (every stage, even one whose trial
+    // state strays past the boundary, sees the same force); the geometry is checked afterwards. A step that crossed the boundary is
+    // rolled back and replaced by one that lands on the crossing, where the state flips. Without this, each crossing adds a velocity
+    // error the step-size control cannot see, and the run stops converging as rtol is tightened.
+    function shadowAt(t, yy) { return inShadow(yy[0], yy[1], yy[2], sunDirection(tt0 + t), EARTH.a); }
+    function shadowCrossing(s0) {      // first time in the last step where the geometric state differs from s0 (ends and midpoint checked), just past it
+      var ta = st.tOld, hh = st.h, lo = 0, hi = -1, q, x;
+      st.dense(ta + 0.5 * hh, o7); if (shadowAt(ta + 0.5 * hh, o7) !== s0) hi = 0.5; else if (shadowAt(ta + hh, st.y) !== s0) { lo = 0.5; hi = 1; }
+      if (hi < 0) return Infinity;
+      for (q = 0; q < 60; q++) { x = 0.5 * (lo + hi); st.dense(ta + x * hh, o7); if (shadowAt(ta + x * hh, o7) !== s0) hi = x; else lo = x; }
+      return ta + hi * hh;
+    }
+    for (var i = 0; i < N; i++) {
+      var sat = c.sats[i], bl = c.burns[i], bj = 0, buf = F(6 * nOut), kO = 1, y7 = F(7), k;
+      var shadowEvents = srp && isE && sat.area > 0, lit = shadowEvents ? !inShadow(sat.state[0], sat.state[1], sat.state[2], sd0, EARTH.a) : undefined;
+      var fun = (function (sat, b) { return function (t, yy, out) { out[6] = deriv(yy, 0, poleFast(t), out, 0, b, sat, t, isE ? sunDirection(tt0 + t) : null, lit); }; })(sat, bc[i]);
+      for (k = 0; k < 6; k++) y7[k] = sat.state[k];
+      st = new Dop853(7, 6, fun, { rtol: c.rtol, atol: c.atol, maxStep: c.maxStep, initialStep: c.initialStep }); st.init(0, y7, dur);
+      bj = burnsAt(i, 0, bl, bj);
+      var tEvent = Infinity, u0 = utcNominal(tt0);
+      while (st.t < dur - epsA) {
+        if (swVaries) {           // entering a new 3-hour space-weather slot: hold it for the coming steps, recompute the step-start derivative
+          var slot = Math.floor((u0 + st.t + 43200 + 1e-6) / 10800);
+          if (slot !== swLock) { var firstSlot = swLock === null; swLock = slot; if (!firstSlot) st.reset(); }
+        }
+        var tLim = Math.min(bj < bl.length && bl[bj].t < dur - epsA ? bl[bj].t : dur, tEvent, swVaries ? (swLock + 1) * 10800 - 43200 - u0 : Infinity);
+        if (!st.step(tLim)) throw new Error('integrator: the dop853 step size became too small for "' + sat.name + '" at t = ' + st.t.toFixed(3) + ' s. Loosen rtol or atol.');
+        if (++stats.steps > LIMITS.maxSatSteps) throw new Error('integrator: run needs more than ' + LIMITS.maxSatSteps + ' satellite-steps. Loosen rtol or atol, or shorten the run');
+        if (shadowEvents) {
+          var landed = st.t >= tEvent - 1e-9; tEvent = Infinity;
+          if (!landed) { var tc = shadowCrossing(!lit); if (tc < st.t - 1e-6) { st.rollback(); stats.steps--; tEvent = tc; continue; } }
+          if (shadowAt(st.t, st.y) === lit) { lit = !lit; st.reset(); stats.events++; }     // on (or within 1 us of) the boundary: switch the force
+        }
+        var tb = st.t, last = tb >= dur - epsA, ti = impactIn(i);
+        while (kO < nOut) {
+          var tk = kO * c.outStep; if (tk > ti || !(tk < tb - epsA || (last && tk <= tb + epsA))) break;
+          st.dense(Math.min(tk, tb), o7); buf.set(o7.subarray(0, 6), 6 * kO); kO++;
+        }
+        if (ti < Infinity) {
+          tImp[i] = ti; var is = impS[i], rb = mvec(P.matrixAt(tt0 + ti, ti), [is[0], is[1], is[2]]), g = geodetic(rb[0], rb[1], rb[2], P.radius, P.flattening);
+          impacts.push({ name: sat.name, kind: drag ? 'reentry' : 'impact', t: ti, epoch: formatUtc(tt0 + ti), bodyFixed: rb, latDeg: g.lat * R2D, lonDeg: g.lon * R2D, speed: Math.hypot(is[3], is[4], is[5]) });
+          alive[i] = false; break;
+        }
+        W[i] = st.y[6];
+        var en = energy(st.y, 0, poleFast(tb));     // energy residual after removing non-gravitational work and burn energy
+        dE[i] = Math.max(dE[i], Math.abs((en[0] - E0[i] - W[i] - EB[i]) / E0[i])); dJ[i] = Math.max(dJ[i], Math.abs((en[1] - J0[i] - JB[i]) / J0[i]));
+        bj = burnsAt(i, tb, bl, bj);
+        if (stats.steps % 300 === 0) yield (i + tb / dur) / N;
+      }
+      nValid[i] = kO; outS.push(buf); swLock = null;
+      stats.rejected += st.rejected; if (st.hMin < stats.hMin) stats.hMin = st.hMin; if (st.hMax > stats.hMax) stats.hMax = st.hMax;
+    }
+    for (var kk = 1; kk < nOut; kk++) {
+      var any = false; for (i = 0; i < N; i++) if (kk < nValid[i]) any = true;
+      if (!any) break;
+      var tq = kk * c.outStep, epoch = formatUtc(tt0 + tq), rot = rotDeg(tq), ts = fmtT(tq), Mk = isE ? earthRotation(tt0 + tq, P.dut1).M : null, sdk = isE ? sunDirection(tt0 + tq) : null;
+      for (i = 0; i < N; i++) if (kk < nValid[i]) { lines.push(row(i, epoch, ts, outS[i], 6 * kk, rot, sdk)); if (Mk) addLt(i, tq, Mk, outS[i], 6 * kk); }
+    }
+    return stats;
+  }
   var pA = P.poleAt(tt0), pm, p1, i, o, k;
   var ep0 = formatUtc(tt0), rot0 = rotDeg(0), M0 = isE ? earthRotation(tt0, P.dut1).M : null, sd0 = isE ? sunDirection(tt0) : null, summary = [];
   for (i = 0; i < N; i++) {
@@ -100,7 +238,8 @@ export function* simulate(rawConfig) {
     var el = stateToKep(P.mu, c.sats[i].state), closed = el.a > 0 && el.e < 1;     // orbit summary at start_epoch (SIM_082)
     summary.push(closed ? { period: TWO_PI * Math.sqrt(el.a * el.a * el.a / P.mu), hp: el.a * (1 - el.e) - P.radius, ha: el.a * (1 + el.e) - P.radius } : null);
   }
-  var kOut = 1, nAlive = N;
+  var kOut = 1, nAlive = N, aStats = null;
+  if (c.integrator === 'dop853') aStats = yield* runAdaptive();
   var sdA = sd0, sdB, sdM;
   for (var n = 0; n < c.nSteps && nAlive > 0; n++) {
     var ta = n * h, tb = (n + 1) * h, ti;
@@ -164,21 +303,27 @@ export function* simulate(rawConfig) {
   }
   // header (SIM_055, SIM_062, SIM_066, SIM_069)
   var rd = poleRaDec(P.poleAt(tt0)), H = [];
-  H.push('# plan.csv written by the orbital simulator');
+  H.push('# plan.csv written by Project Wednesday');
   H.push('# sim_version: ' + VERSION);
   H.push('# inertial_frame: ' + P.frame + '; centre: ' + P.centre);
   H.push('# body_fixed_frame: ' + P.bodyFrame);
-  var fmArr = ['gravity']; if (drag) fmArr.push('drag (exponential atmosphere, co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); H.push('# force_model: ' + fmArr.join(' + '));
+  H.push('# integrator: ' + (aStats ? 'dop853; rtol=' + c.rtol + '; atol=' + c.atol + (c.maxStep < Infinity ? '; max_step_s=' + c.maxStep : '') + '; accepted_steps=' + aStats.steps + '; rejected_steps=' + aStats.rejected + '; shadow_events=' + aStats.events +
+    (aStats.hMax > 0 ? '; step_s_min=' + (aStats.hMin < Infinity ? aStats.hMin : aStats.hMax).toPrecision(4) + '; step_s_max=' + aStats.hMax.toPrecision(4) : '') : 'rk4; time_step_s=' + h));
+  var fmArr = ['gravity'];
+  if (drag) fmArr.push('drag (' + (msis ? 'NRLMSISE-00 atmosphere, ' + (swFixed ? 'fixed F10.7=' + swo.f107 + ', F10.7A=' + swo.f107a + ', Ap=' + swo.ap : 'space weather from the bundled CelesTrak table' + (Object.keys(swo).length ? ' with ' + Object.keys(swo).map(function (k) { return k + '=' + swo[k]; }).join(', ') + ' fixed' : '')) : 'exponential atmosphere') + ', co-rotating; re-entry declared at 80 km)'); if (srp) fmArr.push('solar radiation pressure (cannonball, P=4.56e-6 N/m² at 1 AU scaled by 1/r², cylindrical shadow)'); if (tb3) fmArr.push('Sun and Moon point-mass gravity (Moon: Meeus/ERFA moon98; Sun: low-precision analytic)'); H.push('# force_model: ' + fmArr.join(' + '));
   H.push('# parent_pole_ra_deg: ' + (rd[0] * R2D).toFixed(9));
   H.push('# parent_pole_dec_deg: ' + (rd[1] * R2D).toFixed(9));
   H.push('# data_file: name=' + leap.name + '; version=' + leap.version + '; crc32=' + leap.checksum + '; source=' + leap.source);
   H.push('# data_file: name=builtin_models; version=' + VERSION + '; crc32=' + crc32(JSON.stringify([NUT00B, TDB_TERMS, EARTH, ATMO])) + '; source=WGS84, EGM96 zonals J2-J4, IAU 2006 precession, IAU 2000B nutation, Fairhead-Bretagnon TDB series');
+  if (msis) H.push('# data_file: name=nrlmsise00_coefficients; version=NRLMSISE-00 (2001); crc32=' + dataCrc('msis', function () { return JSON.stringify([PT, PD, PDM]); }) + '; source=Picone et al. 2002, C port by D. Brodowski');
+  if (msis && !swFixed) H.push('# data_file: name=space_weather; version=' + spaceWeatherVersion() + '; crc32=' + dataCrc('sw', function () { return SW_DAILY; }) + '; source=CelesTrak SW-All.txt, https://celestrak.org/SpaceData/');
+  if (tb3) H.push('# data_file: name=moon98_series; version=ERFA moon98 (Meeus 1998); crc32=' + dataCrc('moon', function () { return JSON.stringify([MOON_LR, MOON_B]); }) + '; source=ERFA moon98.c');
   H.push('# config: ' + JSON.stringify(rawConfig));
   COLUMNS.forEach(function (col) { H.push('# column: ' + col[0] + '; unit: ' + col[1] + '; frame: ' + (col[2] === 'inertial' ? P.frame : col[2])); });
   var hasJ = P.shape === 'sphere_uniform';   // Earth's pole moves (precession-nutation), so only inertial energy is conserved there
   var report = c.sats.map(function (sat, i) {
     var L = LT[i], ok = isE && L.h.length > 1, fit = ok ? fitLine(L.t, L.h) : null, sm = summary[i];
-    return { name: sat.name, energyDrift: dE[i], jacobiDrift: hasJ ? dJ[i] : null, impact: null, dragWork: drag && !srp ? W[i] : null, nonGravWork: drag || srp ? W[i] : null, burnEnergy: EB[i], dvTotal: dvT[i], burns: c.burns[i].length,
+    return { name: sat.name, energyDrift: dE[i], jacobiDrift: hasJ ? dJ[i] : null, impact: null, dragWork: drag && !srp && !tb3 ? W[i] : null, nonGravWork: (drag || srp) && !tb3 ? W[i] : null, perturbationWork: tb3 ? W[i] : null, burnEnergy: EB[i], dvTotal: dvT[i], burns: c.burns[i].length,
       period: sm ? sm.period : null, perigeeAlt: sm ? sm.hp : null, apogeeAlt: sm ? sm.ha : null,
       ltanStart: ok ? L.h[0] : null, ltanEnd: ok ? L.h[L.h.length - 1] : null, ltanDrift: ok ? fit[0] * 60 * 86400 : null };
   });
@@ -186,13 +331,13 @@ export function* simulate(rawConfig) {
   report.forEach(function (r) {
     H.push('# report: sat=' + r.name + '; energy_rel_drift=' + r.energyDrift.toExponential(3) + (hasJ ? '; jacobi_rel_drift=' + r.jacobiDrift.toExponential(3) : '') +
       (r.period !== null ? '; period_s=' + r.period.toFixed(3) + '; perigee_alt_m=' + r.perigeeAlt.toFixed(1) + '; apogee_alt_m=' + r.apogeeAlt.toFixed(1) : '') +
-      (drag && !srp ? '; drag_work_j_per_kg=' + r.dragWork.toExponential(6) : '') + (srp ? '; nongrav_work_j_per_kg=' + r.nonGravWork.toExponential(6) : '') + (r.burns ? '; burns=' + r.burns + '; dv_total_m_s=' + r.dvTotal.toFixed(6) : '') +
+      (r.dragWork !== null ? '; drag_work_j_per_kg=' + r.dragWork.toExponential(6) : '') + (srp && !tb3 ? '; nongrav_work_j_per_kg=' + r.nonGravWork.toExponential(6) : '') + (tb3 ? '; perturbation_work_j_per_kg=' + r.perturbationWork.toExponential(6) : '') + (r.burns ? '; burns=' + r.burns + '; dv_total_m_s=' + r.dvTotal.toFixed(6) : '') +
       (r.ltanStart !== null ? '; ltan_start=' + fmtHms(r.ltanStart) + '; ltan_end=' + fmtHms(r.ltanEnd) + '; ltan_drift_min_per_day=' + r.ltanDrift.toFixed(4) : ''));
     if (r.impact) H.push('# impact: sat=' + r.name + '; kind=' + r.impact.kind + '; epoch_utc=' + r.impact.epoch + '; t_s=' + r.impact.t.toFixed(3) + '; body_fixed_m=' + r.impact.bodyFixed.map(function (v) { return v.toFixed(3); }).join(' ') +
       '; lat_deg=' + r.impact.latDeg.toFixed(5) + '; lon_deg=' + r.impact.lonDeg.toFixed(5));
   });
   H.push(COLUMNS.map(function (col) { return col[0]; }).join(','));
-  return { csv: H.join('\n') + '\n' + lines.join('\n') + '\n', report: report, rows: lines.length, steps: Math.min(c.nSteps, n), dt: h, parent: { shape: P.shape, mu: P.mu, radius: P.radius } };
+  return { csv: H.join('\n') + '\n' + lines.join('\n') + '\n', report: report, rows: lines.length, steps: aStats ? aStats.steps : Math.min(c.nSteps, n), dt: aStats ? null : h, integrator: aStats ? { type: 'dop853', rejected: aStats.rejected, events: aStats.events, hMin: aStats.hMin, hMax: aStats.hMax } : { type: 'rk4' }, parent: { shape: P.shape, mu: P.mu, radius: P.radius } };
 }
 
 export function run(rawConfig) { var g = simulate(rawConfig), r; do { r = g.next(); } while (!r.done); return r.value; }
