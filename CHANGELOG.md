@@ -2,6 +2,8 @@
 
 ## 0.3.0
 
+- Validated against Orekit on every example config plus two SRP cases. Table in the README, scripts in `validation/`.
+- Fixed: a burn landing exactly on an integration step boundary showed the pre-burn state in that row, while off-grid burns showed post-burn. Both now show post-burn. Found by the Orekit comparison.
 - Solar radiation pressure (cannonball model) with Earth shadow. Cr as a constant or a schedule. `force_model.srp`, with `solar_drag` accepted as another name.
 - SRP pressure now scales with the Earth-Sun distance (1/r²). Before, it was fixed at the 1 AU value, about 3% off at perihelion and aphelion.
 - With SRP on, plan.csv reports `nongrav_work_j_per_kg` (drag plus SRP). `drag_work_j_per_kg` only appears when drag is the only extra force, so the label matches what was summed.

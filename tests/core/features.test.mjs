@@ -93,4 +93,10 @@ const Eof = (q, t) => { const s = q.slice(3, 9).map(Number); return (s[3] ** 2 +
   const r = S.run(c); check('SIM_027', 'per-satellite area: 4x the area gives about 4x the drag work (a little more, since it sinks into denser air)', Math.abs(r.report[1].dragWork / r.report[0].dragWork - 4) < 0.5, (r.report[1].dragWork / r.report[0].dragWork).toFixed(3));
   const old = S.run(base).csv.split('\n').map(l => l[0] === '#' ? l : l.split(',').slice(0, 10).join(',')).join('\n');
   check('compat', 'plan.csv files written before the in_shadow column still load', S.parsePlanCsv(old).sats[0].t.length === 1441); }
+// ---- burn exactly on an integration step boundary: the row at the burn epoch shows the post-burn state, same as off-grid burns
+{ const c = clone(base); c.duration = 3000; c.output_step_s = 10; c.satellites.orbits = [kep(RE + 500e3, 0.001, 51.6, 10, 0, 0)];
+  const ref = rows(S.run(c).csv), cb = clone(c); cb.maneuvers = [{ sat: 'A', t_s: 1230, dv_m_s: [0, 1, 0], frame: 'lvlh' }];
+  const R = rows(S.run(cb).csv), k = R.findIndex(q => +q[2] === 1230), dv = Math.hypot(...[6, 7, 8].map(j => +R[k][j] - +ref[k][j])), pre = Math.hypot(...[6, 7, 8].map(j => +R[k - 1][j] - +ref[k - 1][j]));
+  check('SIM_038', 'burn on a step boundary: row at the burn epoch is post-burn, row before is untouched', Math.abs(dv - 1) < 3e-7 && pre === 0, 'dv ' + dv.toFixed(7) + ' m/s'); }
+
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed'); process.exit(fails ? 1 : 0);
