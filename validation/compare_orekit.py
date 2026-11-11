@@ -12,11 +12,15 @@ Reference set-up:
     is a model choice, not something being validated. Height from Orekit's exact geodetic conversion.
   - SRP: Orekit SolarRadiationPressure (conical shadow with penumbra, oblate Earth) with the Sun from JPL DE421,
     reference pressure 4.56e-6 N/m^2 at 1 AU.
+  - Drag with NRLMSISE-00 (v0.4.0 cases): Orekit's own NRLMSISE00 with 3-hour ap and mean local solar time, reading the same
+    CelesTrak SW-All.txt file through Orekit's CssiSpaceWeatherData (taken from the spaceweather package). Sun from DE421.
+  - Sun and Moon gravity (v0.4.0 cases): Orekit ThirdBodyAttraction with both positions from JPL DE421, so these rows also
+    measure the simulator's analytic Sun and Moon positions (a model difference, like SRP).
   - Burns: ImpulseManeuver in the QSW local frame (radial, along-track, cross-track), no mass change.
   - Leap seconds: tai-utc.dat generated from ERFA, independent of the simulator's table.
 
 Usage: python3 validation/compare_orekit.py   (after node validation/export-runs.mjs)
-Needs: pip install orekit-jpype pyerfa jplephem de421 numpy, and a Java 11+ runtime.
+Needs: pip install orekit-jpype pyerfa jplephem de421 spaceweather numpy, and a Java 11+ runtime.
 """
 import glob
 import json
@@ -64,7 +68,10 @@ from org.hipparchus.ode.nonstiff import DormandPrince853Integrator  # noqa: E402
 from org.orekit.attitudes import LofOffset, FrameAlignedProvider  # noqa: E402
 from org.orekit.bodies import OneAxisEllipsoid  # noqa: E402
 from org.orekit.forces.drag import DragForce, IsotropicDrag  # noqa: E402
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel  # noqa: E402
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction  # noqa: E402
+from org.orekit.data import DataSource  # noqa: E402
+from org.orekit.models.earth.atmosphere import NRLMSISE00  # noqa: E402
+from org.orekit.models.earth.atmosphere.data import CssiSpaceWeatherData  # noqa: E402
 from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem  # noqa: E402
 from org.orekit.forces.maneuvers import ImpulseManeuver  # noqa: E402
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient  # noqa: E402
@@ -141,6 +148,51 @@ def sun_gcrf(tt_seconds):
     return (sun - earth)[:, 0] * 1000.0
 
 
+def moon_gcrf(tt_seconds):
+    return EPH.position('moon', 2451545.0 + tt_seconds / 86400.0)[:, 0] * 1000.0     # DE421 'moon' is geocentric
+
+
+@JImplements(ExtendedPositionProvider)
+class MoonProvider:
+    @JOverride
+    def getPosition(self, date, frame):
+        if not isinstance(date, AbsoluteDate):
+            raise NotImplementedError('field version not needed')
+        p = moon_gcrf(date.durationFrom(AbsoluteDate.J2000_EPOCH))
+        v = Vector3D(float(p[0]), float(p[1]), float(p[2]))
+        return v if frame == GCRF else GCRF.getStaticTransformTo(frame, date).transformPosition(v)
+
+
+def space_weather():
+    """CelesTrak SW-All.txt from the spaceweather package, made readable by Orekit: its CSSI parser wants the v1.2 section name
+    MONTHLY_FIT and rejects blank fields in prediction lines. Only measured dates are used here, so the filled values never matter."""
+    import spaceweather
+    import tempfile
+    src = os.path.join(os.path.dirname(spaceweather.__file__), 'data', 'SW-All.txt')
+    W = [4, 3, 3, 5, 3] + [3] * 8 + [4] + [4] * 8 + [4, 4, 2, 4, 6, 2, 6, 6, 6, 6, 6]
+    out, sec = [], None
+    for line in open(src).read().split('\n'):
+        if line.startswith('BEGIN '):
+            sec = line[6:].strip()
+        elif line.startswith('END '):
+            sec = None
+        elif sec in ('DAILY_PREDICTED', 'MONTHLY_PREDICTED') and line.strip():
+            line, i, f = line.ljust(sum(W)), 0, []
+            for w in W:
+                x = line[i:i + w]
+                f.append(x if x.strip() else ('0.0' if w in (4, 6) and i >= 93 else '0').rjust(w))
+                i += w
+            line = ''.join(f)
+        out.append(line.replace('MONTHLY_PREDICTED', 'MONTHLY_FIT'))
+    tmp = tempfile.NamedTemporaryFile('w', suffix='-SW-All.txt', delete=False)
+    tmp.write('\n'.join(out))
+    tmp.close()
+    return CssiSpaceWeatherData(DataSource(File(tmp.name)), TimeScalesFactory.getUTC())
+
+
+SPACE_WEATHER = None
+
+
 @JImplements(ExtendedPositionProvider)
 class SunProvider:
     @JOverride
@@ -189,8 +241,16 @@ def propagator(case, sat, init_state, tol_scale=1.0):
     if earth_like:
         body = OneAxisEllipsoid(P['a'], P['f'], TIRF)
         prop.addForceModel(HolmesFeatherstoneAttractionModel(TIRF, zonal_provider(P)))
-        if case['drag']:
+        if case['drag'] and case.get('atmosphere') == 'nrlmsise00':
+            global SPACE_WEATHER
+            SPACE_WEATHER = SPACE_WEATHER or space_weather()
+            msis = NRLMSISE00(SPACE_WEATHER, SunProvider(), body, TimeScalesFactory.getUTC()).withSwitch(9, -1).withLocalSolarTimeMode(NRLMSISE00.LocalSolarTimeMode.MEAN)
+            prop.addForceModel(DragForce(msis, IsotropicDrag(float(sat['area']), float(sat['cd']))))
+        elif case['drag']:
             prop.addForceModel(DragForce(TableAtmosphere(body), IsotropicDrag(float(sat['area']), float(sat['cd']))))
+        if case.get('third_body'):
+            prop.addForceModel(ThirdBodyAttraction(SunProvider(), 'Sun', float(case['gm_sun'])))
+            prop.addForceModel(ThirdBodyAttraction(MoonProvider(), 'Moon', float(case['gm_moon'])))
         if case['srp']:
             prop.addForceModel(SolarRadiationPressure(AU, 4.56e-6, SunProvider(), body,
                                                       IsotropicRadiationSingleCoefficient(float(sat['area']), float(sat['cr']))))
@@ -243,7 +303,9 @@ for f in sorted(glob.glob(os.path.join(HERE, 'runs', '*.json'))):
     case = json.load(open(f))
     forces = ['J2-J4' if case['parent']['shape'] == 'earth_default' else 'point mass']
     if case['drag']:
-        forces.append('drag')
+        forces.append('NRLMSISE-00 drag' if case.get('atmosphere') == 'nrlmsise00' else 'drag')
+    if case.get('third_body'):
+        forces.append('Sun + Moon')
     if case['srp']:
         forces.append('SRP')
     for sat in case['sats']:
@@ -261,7 +323,7 @@ for f in sorted(glob.glob(os.path.join(HERE, 'runs', '*.json'))):
         n = min(len(half), len(ref))
         dp_half = np.linalg.norm(half[:n, 1:4] - ref[:n, :3], axis=1)
         noise = np.linalg.norm(ref[:, :3] - ref_loose[:, :3], axis=1)
-        r = {'case': case['name'], 'sat': sat['name'], 'duration_s': float(times[-1]), 'step_s': case['step_s'], 'forces': ' + '.join(forces_s),
+        r = {'case': case['name'], 'sat': sat['name'], 'duration_s': float(times[-1]), 'step_s': case.get('step_s'), 'integrator': case.get('integrator') or f"RK4 {case.get('step_s'):g} s", 'forces': ' + '.join(forces_s),
              'max_pos_m': float(dp.max()), 'final_pos_m': float(dp[-1]), 'max_vel_m_s': float(dv.max()), 'max_pos_half_step_m': float(dp_half.max()),
              'ref_noise_m': float(noise.max()), 'kep_to_cart_m': kep_check(case, sat), 'impact_s': sat['impact'],
              'orbit_m': float(np.linalg.norm(rows[0, 1:4]))}
@@ -276,7 +338,7 @@ def vel(x):
     return '< 0.001 mm/s' if x < 1e-6 else f'{x * 1000:.2g} mm/s'
 
 
-lines = ['| Case | Satellite | Span | Step | Forces | Max position error | Final position error | Max velocity error | Max error at half step |',
+lines = ['| Case | Satellite | Span | Integrator | Forces | Max position error | Final position error | Max velocity error | Max error, finer setting |',
          '|---|---|---|---|---|---|---|---|---|']
 for name in dict.fromkeys(r['case'] for r in results):
     group = [r for r in results if r['case'] == name]
@@ -287,7 +349,7 @@ for name in dict.fromkeys(r['case'] for r in results):
         group = [w]
     for r in group:
         span = dur(r['duration_s']) + (' (to impact)' if r['impact_s'] else '')
-        lines.append(f"| {r['case']} | {r['sat']} | {span} | {r['step_s']:g} s | {r['forces']} | {fmt_len(r['max_pos_m'])} | {fmt_len(r['final_pos_m'])} |"
+        lines.append(f"| {r['case']} | {r['sat']} | {span} | {r['integrator']} | {r['forces']} | {fmt_len(r['max_pos_m'])} | {fmt_len(r['final_pos_m'])} |"
                      f" {vel(r['max_vel_m_s'])} | {fmt_len(r['max_pos_half_step_m'])} |")
 kc = [r['kep_to_cart_m'] for r in results if r['kep_to_cart_m'] is not None]
 noise = max(r['ref_noise_m'] for r in results)
