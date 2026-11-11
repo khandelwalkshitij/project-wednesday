@@ -1,6 +1,7 @@
 # Project Wednesday
 
-**Live:** <https://khandelwalkshitij.github.io/project-wednesday/>
+**Live:** <https://khandelwalkshitij.github.io/project-wednesday/>  
+By Kshitij Khandelwal, [kshitijkhandelwal.com](https://kshitijkhandelwal.com).
 
 ![Project Wednesday showing a 24-satellite Walker constellation on the 3D globe, with the setup form on the left](docs/images/screenshot.png)
 
@@ -176,6 +177,8 @@ A run is one JSON config. Minimal example (the [config reference](docs/config-re
 ```
 
 ## Source and feedback
+
+Project Wednesday is made by Kshitij Khandelwal. More at [kshitijkhandelwal.com](https://kshitijkhandelwal.com).
 
 The code lives at <https://github.com/khandelwalkshitij/project-wednesday>. Bugs and feature requests go in the [issue tracker](https://github.com/khandelwalkshitij/project-wednesday/issues). Releases are described in [`CHANGELOG.md`](CHANGELOG.md).
 

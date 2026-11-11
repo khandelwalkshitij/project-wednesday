@@ -2,6 +2,7 @@
 
 ## 0.4.0
 
+- Credits and links to kshitijkhandelwal.com in the README and the Documentation tab. Clicking the title in the title bar reloads the page.
 - Validated against Orekit on every example config plus two SRP cases. Table in the README, scripts in `validation/`.
 - The Orekit validation table in the README is rerun for v0.4.0 and extended with six cases for the new features: DOP853 on two example configs, NRLMSISE-00 drag on a quiet and a storm day, and Sun and Moon gravity in LEO and GEO (`validation/`).
 - The Documentation tab is a simple page that keeps the earlier look's character: the app's font, navy headings with rules, grey table headers and lightly shaded examples, without boxes or bevels.

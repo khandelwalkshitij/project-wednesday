@@ -22,7 +22,7 @@ body { background: #008080; color: #000; font: 13px/1.35 var(--sans); padding: 6
 /* window frame */
 #win { display: flex; flex-direction: column; height: calc(100vh - 12px); min-height: 520px; background: var(--face); box-shadow: var(--raised); padding: 3px; }
 .title-bar { background: linear-gradient(90deg, #000080, #1084d0); color: #fff; font-weight: bold; padding: 3px 3px 3px 5px; display: flex; align-items: center; gap: 6px; flex: none; }
-.title-bar h1 { font-size: 13px; margin: 0; }
+.title-bar h1 { font-size: 13px; margin: 0; cursor: pointer; }
 .chip { font-weight: normal; }
 #app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 4px; padding-top: 3px; }
 #panel { overflow-y: auto; padding: 4px 10px 10px; }
@@ -6356,6 +6356,7 @@ a.doclink { font-size: 0.92em; }
 <h3 id="models--run-report-and-checks">Run report and checks</h3>
 <div class="doc-tablewrap"><table class="doc-table"><tr><th>Metric</th><th>Meaning</th></tr><tr><td>Energy drift</td><td>The specific orbital energy is checked at every step. The work done by drag, SRP and Sun and Moon gravity, and the energy added by burns, are tracked and removed, so what is left is numerical error alone (typically below 10<sup>-8</sup>). For a uniform sphere the Jacobi integral is checked too.</td></tr><tr><td>Period, perigee, apogee</td><td>From the osculating orbit at the start epoch. Altitudes are above the equatorial radius.</td></tr><tr><td>LTAN</td><td>Local time of the ascending node: the mean local solar time when the satellite crosses the equator going north, with the node measured on the true equator of date. The drift rate is a least-squares line through the samples, and needs at least 3 orbits and 12 hours.</td></tr><tr><td>Beta angle</td><td>The angle between the Sun direction and the orbit plane.</td></tr><tr><td>Burns, \u0394v</td><td>Number of burns and total delta-v per satellite.</td></tr></table></div>
 <h3 id="models--source-licence-and-attribution">Source, licence and attribution</h3>
+<p>Project Wednesday is made by Kshitij Khandelwal. More at <a href="https://kshitijkhandelwal.com" target="_blank" rel="noopener">kshitijkhandelwal.com</a>.</p>
 <p>The source code is on GitHub at <a href="https://github.com/khandelwalkshitij/project-wednesday" target="_blank" rel="noopener">github.com/khandelwalkshitij/project-wednesday</a>. Report bugs or request features through the <a href="https://github.com/khandelwalkshitij/project-wednesday/issues" target="_blank" rel="noopener">issue tracker</a>. The <a href="https://github.com/khandelwalkshitij/project-wednesday/blob/main/CHANGELOG.md" target="_blank" rel="noopener">changelog</a> lists what changed in each version.</p>
 <p><b>Project Wednesday</b> is open-source software released under the <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT License</a>. The software is provided "as is", without warranty of any kind.</p>
 <ul><li><b>Standards:</b> IAU 2006/2000B precession-nutation, the IERS Bulletin C leap-second table, WGS84 and EGM96 zonal coefficients.</li><li><b>SGP4/SDP4:</b> from <a href="https://github.com/shashwatak/satellite-js" target="_blank" rel="noopener">satellite.js</a> 6.0.2 (MIT), a port of Vallado's reference code.</li><li><b>Atmosphere and space weather:</b> NRLMSISE-00 (Picone, Hedin, Drob and Aikin 2002), ported from the public-domain C version by Dominik Brodowski. A U.S. Government work not subject to copyright; no endorsement by the Naval Research Laboratory is implied. Space weather from <a href="https://celestrak.org/SpaceData/" target="_blank" rel="noopener">CelesTrak</a>.</li><li><b>Moon ephemeris, nutation and TDB series:</b> coefficients from <a href="https://github.com/liberfa/erfa" target="_blank" rel="noopener">ERFA</a> (BSD-style licence, derived from IAU SOFA).</li><li><b>Map:</b> continental outlines from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain).</li><li><b>Graphics:</b> <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT).</li></ul>
@@ -7022,8 +7023,8 @@ a.doclink { font-size: 0.92em; }
     s.setAttribute("data-tip", htmlTip);
     return s;
   }
-  function grp(title, kids, tipHtml) {
-    var legNodes = [document.createTextNode(title)];
+  function grp(title2, kids, tipHtml) {
+    var legNodes = [document.createTextNode(title2)];
     if (tipHtml) legNodes.push(infoIcon(tipHtml));
     return mk("fieldset", { cls: "fg" }, [mk("legend", {}, legNodes)].concat(kids));
   }
@@ -7600,6 +7601,13 @@ a.doclink { font-size: 0.92em; }
   }
 
   // src/main.js
+  var title = document.querySelector(".title-bar h1");
+  if (title) {
+    title.title = "Reload the page";
+    title.addEventListener("click", function() {
+      location.reload();
+    });
+  }
   init();
   init13();
   init11();

@@ -70,6 +70,8 @@ Initial orbits can be osculating Keplerian elements, an inertial position and ve
 
 ## Source, licence and attribution
 
+Project Wednesday is made by Kshitij Khandelwal. More at [kshitijkhandelwal.com](https://kshitijkhandelwal.com).
+
 The source code is on GitHub at [github.com/khandelwalkshitij/project-wednesday](https://github.com/khandelwalkshitij/project-wednesday). Report bugs or request features through the [issue tracker](https://github.com/khandelwalkshitij/project-wednesday/issues). The [changelog](https://github.com/khandelwalkshitij/project-wednesday/blob/main/CHANGELOG.md) lists what changed in each version.
 
 **Project Wednesday** is open-source software released under the [MIT License](https://opensource.org/licenses/MIT). The software is provided "as is", without warranty of any kind.
