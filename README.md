@@ -1,6 +1,6 @@
 # Project Wednesday
 
-[Blog](https://kshitijkhandelwal.com/project-wednesday).
+[Read the blog!](https://kshitijkhandelwal.com/project-wednesday)
 
 **Live:** <https://khandelwalkshitij.github.io/project-wednesday/>
 
