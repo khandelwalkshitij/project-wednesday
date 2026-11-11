@@ -17,6 +17,13 @@ const CFG = { parent: { shape: 'earth_default' }, start_epoch: '2026-11-10T06:30
   satellites: { count: 3, mass_kg: 100, cd: 2.2, cr: 1.5, area_m2: 1, names: ['Low 300', 'Boosted 300', 'High 550'], orbits: [kep(RE + 300e3, 0, 51.6, 10, 0, 0), kep(RE + 300e3, 0, 51.6, 10, 0, 90), kep(RE + 550e3, 0, 97.6, 80, 0, 0)] },
   maneuvers: [{ sat: 'Boosted 300', t_s: 86400, dv_m_s: [0, 2, 0] }, { sat: 'Boosted 300', t_s: 172800, dv_m_s: [0, 2, 0] }] };
 
+// Screenshots go through the DevTools protocol: page.screenshot waits for the WebGL canvas to settle and times out
+// intermittently with a software renderer (seen in CI and in containers), while Page.captureScreenshot returns at once.
+async function shot(page, file) {
+  const cdp = await page.context().newCDPSession(page);
+  try { fs.writeFileSync(file, Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png' })).data, 'base64')); } finally { await cdp.detach(); }
+}
+
 async function suite(browser, url, tag) {
   console.log('\n=== ' + tag + ': ' + url);
   const page = await browser.newPage({ viewport: { width: 1360, height: 820 } }), errs = [];
@@ -25,7 +32,7 @@ async function suite(browser, url, tag) {
   await page.goto(url); await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await page.reload();
   await page.waitForFunction(() => window.OrbitalSim && OrbitalSim.viewer.state().n > 0, null, { timeout: 60000 });
   check(tag + ': page loads and runs the default config', true);
-  await page.screenshot({ path: OUT + '/' + tag + '-start.png' });
+  await shot(page, OUT + '/' + tag + '-start.png');
 
   const runCfg = async cfg => {
     await page.evaluate(c => { const t = document.getElementById('config'); t.value = JSON.stringify(c, null, 2); t.dispatchEvent(new Event('change')); OrbitalSim.run(); }, cfg);
@@ -35,7 +42,7 @@ async function suite(browser, url, tag) {
   const report = (await page.innerText('#report')).replace(/\s+/g, ' ');
   check(tag + ': 3-satellite drag + SRP + burns run completes', /Boosted 300.*2, 4\.00 m\/s/.test(report) && (report.match(/Completed/g) || []).length === 3, report.slice(0, 160));
   for (const v of ['map', 'ltan', 'alt', 'beta', 'ecl', 'range', 'docs', 'globe']) {
-    await page.click('[role=tab][data-v=' + v + ']'); await page.waitForTimeout(250); await page.screenshot({ path: OUT + '/' + tag + '-' + v + '.png' });
+    await page.click('[role=tab][data-v=' + v + ']'); await page.waitForTimeout(250); await shot(page, OUT + '/' + tag + '-' + v + '.png');
   }
   check(tag + ': docs tab shows the documentation pages', /Config reference[\s\S]*Accuracy and limits[\s\S]*Glossary/.test(await page.evaluate(() => { document.querySelector('[role=tab][data-v=docs]').click(); return document.getElementById('docs').innerText; })));
   await page.click('[role=tab][data-v=globe]');
@@ -67,7 +74,7 @@ async function suite(browser, url, tag) {
   check(tag + ': every preset runs', (await page.$eval('#errors', e => e.hidden)), nPre - 1 + ' presets');
 
   // narrow screen
-  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300); await page.screenshot({ path: OUT + '/' + tag + '-mobile.png' });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300); await shot(page, OUT + '/' + tag + '-mobile.png');
   check(tag + ': no horizontal scroll at phone width', !(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
   check(tag + ': no console errors', errs.length === 0, errs.join(' | '));
   await page.close();
