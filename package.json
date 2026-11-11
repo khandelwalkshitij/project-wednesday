@@ -4,6 +4,14 @@
   "description": "Browser orbital simulator: RK4 propagation with J2-J4, drag, SRP, burns, TLE import, 3D globe, Mercator ground tracks and drift charts.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khandelwalkshitij/project-wednesday.git"
+  },
+  "bugs": {
+    "url": "https://github.com/khandelwalkshitij/project-wednesday/issues"
+  },
+  "homepage": "https://github.com/khandelwalkshitij/project-wednesday#readme",
   "scripts": {
     "build": "node scripts/build.mjs",
     "serve": "node scripts/serve.mjs",

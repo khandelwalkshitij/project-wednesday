@@ -80,6 +80,16 @@ The Documentation tab in the app and the "Config fields" list under the JSON box
 }
 ```
 
+## Source and feedback
+
+The code lives at <https://github.com/khandelwalkshitij/project-wednesday>. Bugs and feature requests go in the [issue tracker](https://github.com/khandelwalkshitij/project-wednesday/issues). Releases are described in [`CHANGELOG.md`](CHANGELOG.md).
+
+```
+git clone https://github.com/khandelwalkshitij/project-wednesday.git
+cd project-wednesday
+npm install
+```
+
 ## Licence
 
 MIT, see `LICENSE`. Land outlines from Natural Earth (public domain). three.js r128 loaded from cdnjs (MIT). Nutation and TDB coefficients from ERFA (BSD-style licence, derived from IAU SOFA).
