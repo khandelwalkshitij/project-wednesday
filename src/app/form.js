@@ -139,6 +139,8 @@ export function renderForm() {
   }
   if (c.end_epoch !== undefined) kids.push(row([lab('Output step (s)', numIn(c, 'output_step_s', { w: 70 }))]));
   kids.push(row([integSel].concat(stepFields())));
+  var stepHelp = mk('a', { href: '#accuracy--choosing-a-step', text: 'Which step or tolerance? Accuracy and limits', cls: 'doclink' }); stepHelp.setAttribute('data-doc', '');
+  kids.push(row([stepHelp]));
   formRoot.appendChild(grp('Time', kids, '<b>Time &amp; Integrator Advice</b><br>• <b>Start epoch</b>: Enter as ISO 8601 format: <code>YYYY-MM-DDThh:mm:ss.sss SCALE</code> (SCALE: UTC, TAI, TT, GPS, or TDB).<br>• <b>Duration</b>: Enter seconds or ISO 8601 duration (e.g. <code>P1D</code> = 1 day, <code>PT6H</code> = 6 hours).<br>• <b>RK4</b>: fixed time step (s). Must not exceed 25% of orbital period (recommended &le; period / 20).<br>• <b>DOP853</b>: picks its own step to keep the error per step within <b>rtol</b> (fraction of the value) and <b>atol</b> (m or m/s). rtol 1e-10 is a good default; 1e-12 for reference runs. Usually faster than RK4 at the same accuracy.'));
   // forces
   if (earth) {

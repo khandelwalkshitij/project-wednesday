@@ -1,7 +1,7 @@
 {
   "name": "project-wednesday",
-  "version": "0.3.0",
-  "description": "Browser orbital simulator: RK4 propagation with J2-J4, drag, SRP, burns, TLE import, 3D globe, Mercator ground tracks and drift charts.",
+  "version": "0.4.0",
+  "description": "Browser orbital simulator: RK4 or adaptive DOP853 propagation with J2-J4, drag (exponential or NRLMSISE-00), SRP, Sun and Moon gravity, burns, SGP4 TLE import, 3D globe, Mercator ground tracks and drift charts.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -13,7 +13,8 @@
   },
   "homepage": "https://github.com/khandelwalkshitij/project-wednesday#readme",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node tools/build-docs.mjs && node scripts/build.mjs",
+    "docs": "node tools/build-docs.mjs",
     "serve": "node scripts/serve.mjs",
     "lint": "eslint src scripts tests",
     "test": "npm run test:core && npm run build && npm run test:browser",

@@ -1,8 +1,22 @@
 # Project Wednesday
 
+**Live:** <https://khandelwalkshitij.github.io/project-wednesday/>
+
+![Project Wednesday showing a 24-satellite Walker constellation on the 3D globe, with the setup form on the left](docs/images/screenshot.png)
+
 A browser orbital simulator. Set up satellites around Earth or a small body, propagate them, and play the result back on a 3D globe, a Mercator ground-track map and drift charts. Everything runs in the page. No server, no build needed to use it.
 
-**Use it:** open `dist/project-wednesday.html` in a browser (works straight from disk), or host `index.html` and its folders on any static host such as GitHub Pages.
+**Use it:** open the live link, or `dist/project-wednesday.html` straight from disk, or host `index.html` and its folders on any static host.
+
+## Documentation
+
+- [Overview and models](docs/models.md): what is simulated and how.
+- [Config reference](docs/config-reference.md): every config field, with complete examples, and the `plan.csv` format.
+- [Accuracy and limits](docs/accuracy.md): validation results and how to choose a step size.
+- [Glossary](docs/glossary.md).
+- [Benchmark against Orekit](docs/benchmark-orekit.md), and the requirement sheets (`docs/requirements-*.csv`) with the status of each requirement.
+
+The app's Documentation tab and the field list under its JSON box are generated from these pages.
 
 ## What it models
 
@@ -15,10 +29,10 @@ A browser orbital simulator. Set up satellites around Earth or a small body, pro
 - **Sun and Moon gravity:** point masses, Moon from the Meeus series as in ERFA `eraMoon98`, Sun from a low-precision analytic formula. Optional (`force_model.third_body`).
 - **Burns:** impulsive, in LVLH (radial, along-track, cross-track) or inertial axes, applied at the exact commanded time.
 - **Inputs:** Keplerian or Cartesian states, TLEs (initial state from SGP4/SDP4, then propagated with this force model), Walker and train patterns.
-- **Checks:** energy residual after removing drag work, SRP work and burn energy, so the report shows pure numerical error. Jacobi integral for a uniform sphere.
+- **Checks:** energy residual after removing the work of drag, SRP and Sun and Moon gravity and the energy of burns, so the report shows pure numerical error. Jacobi integral for a uniform sphere.
 - **Outputs:** `plan.csv` ephemeris, LTAN, altitude, beta angle, eclipse and inter-satellite range charts, each exportable as CSV.
 
-Not modelled: tesseral harmonics, JPL-grade ephemerides, penumbra, attitude. See `docs/` for the full requirement list and status.
+Not modelled: tesseral harmonics, JPL-grade ephemerides, penumbra, attitude. See [accuracy and limits](docs/accuracy.md).
 
 ## Layout
 
@@ -27,15 +41,17 @@ index.html               page markup, leap-second table, loads css/ and src/main
 css/                     base, Windows 98 controls, viewer, docs tab, narrow-screen overrides
 src/main.js              entry point: runs each app module's init() in order
 src/core/                physics, no DOM. Runs in the browser and in Node
-  constants, math, time, earth-orientation, elements, environment, parent, sun,
-  interp, patterns, tle, cr-schedule, config, propagator, plan-csv, ltan, index
+  constants, math, time, earth-orientation, elements, environment, parent, sun, moon,
+  interp, patterns, tle, cr-schedule, config, propagator, dop853, nrlmsise00,
+  space-weather, atmosphere, plan-csv, ltan, index
 src/data/                generated tables: nutation series, TDB series, land outlines, DOP853 coefficients, Moon series, NRLMSISE-00 coefficients, space weather
 src/app/                 page logic: boot, presets, form, run, report, infotip, start
 src/viewer/              three.js globe, Mercator map, charts, docs tab, playback loop
+  docs-content.js        the Documentation tab, generated from docs/*.md (do not edit)
 scripts/build.mjs        bundles everything into dist/project-wednesday.html
 scripts/serve.mjs        local static server for development
 src/vendor/sgp4.js       SGP4/SDP4 from satellite.js (MIT), unchanged
-tests/core/              Node tests for the physics (ERFA, SGP4, SciPy DOP853 and independent-integrator checks)
+tests/core/              Node tests: physics against ERFA, SGP4, SciPy, NRL and independent integrators; docs examples
 tools/bench_orekit.py    benchmark against Orekit (Java, via orekit-jpype); results in docs/benchmark-orekit.md
 tools/gen_space_weather.py  rebuilds the space-weather table from a CelesTrak SW-All.txt (download a fresh one to update it)
 tools/gen_nrlmsise00.py  regenerates the NRLMSISE-00 coefficients and their pymsis test truth
@@ -43,7 +59,9 @@ tools/gen_moon98.py      regenerates the Moon series from ERFA moon98.c and its 
 tools/gen_dop853.py      regenerates the DOP853 coefficient table and its SciPy test truth
 tests/browser/           Playwright smoke test of both builds
 tools/gen_tables.py      regenerates the ERFA-derived tables and test truth
-docs/                    requirement sheets (baseline and additional)
+docs/                    the documentation pages, Orekit benchmark, requirement sheets, screenshot
+tools/build-docs.mjs     builds the Documentation tab and field list from docs/*.md
+tools/step-table.mjs     prints the step-size table in docs/accuracy.md
 ```
 
 How the pieces talk:
@@ -60,24 +78,25 @@ How the pieces talk:
 npm install
 npm run serve            # http://localhost:8080/  (ES modules do not load from file://)
 npm run lint
-npm run build            # writes dist/project-wednesday.html
+npm run docs             # regenerates the Documentation tab and field list from docs/*.md
+npm run build            # runs docs, then writes dist/project-wednesday.html
 npm test                 # core tests, build, browser smoke test
 ```
 
 The browser test needs Chromium for Playwright: `npx playwright install chromium`.
 
-Edit `src/`, `css/` or `index.html`, then run `npm run build` so `dist/` stays in step. Commit both.
+Edit `src/`, `css/`, `index.html` or `docs/*.md`, then run `npm run build` so the generated files and `dist/` stay in step. Commit them all. The tests fail if the generated documentation is out of date.
 
 ## Config
 
-The Documentation tab in the app and the "Config fields" list under the JSON box describe every field. Minimal example:
+A run is one JSON config. Minimal example (the [config reference](docs/config-reference.md) has every field and more examples, all tested):
 
 ```json
 {
   "parent": { "shape": "earth_default" },
   "start_epoch": "2026-11-11T00:00:00.000 UTC",
   "duration": "P1D",
-  "integrator": { "type": "rk4", "time_step_s": 10 },
+  "integrator": { "type": "dop853", "rtol": 1e-10, "atol": 1e-6 },
   "output_step_s": 60,
   "force_model": { "drag": true, "srp": true },
   "satellites": {

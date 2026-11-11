@@ -1,7 +1,7 @@
 // Physical constants, WGS84 Earth model, run limits and the ConfigError type.
-/* Orbital simulator core. Baseline requirements only. SI units, radians internally.
+/* Project Wednesday physics core. SI units, radians internally.
    Internal time: TT seconds past J2000.0. Inertial frame: ICRF axes centred on the parent (GCRF for Earth). */
-export var VERSION = '0.3.0';
+export var VERSION = '0.4.0';
 
 export var G = 6.67430e-11, TWO_PI = 2 * Math.PI, D2R = Math.PI / 180, R2D = 180 / Math.PI, AS2R = D2R / 3600, TURNAS = 1296000;
 

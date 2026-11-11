@@ -210,7 +210,7 @@ export function normalizeConfig(raw) {
       if (el.a > 0 && el.e < 1) {
         var period = TWO_PI * Math.sqrt(el.a * el.a * el.a / P.mu);
         if (c.integrator === 'rk4' && c.dt > period * 0.25) {
-          E.push('integrator.time_step_s: step (' + c.dt + ' s) exceeds 25% of orbital period (' + Math.round(period) + ' s) for "' + s.name + '". Fixed-step RK4 will diverge. Reduce time_step_s.');
+          E.push('integrator.time_step_s: step (' + c.dt + ' s) exceeds 25% of orbital period (' + Math.round(period) + ' s) for "' + s.name + '". Fixed-step RK4 will diverge. Reduce time_step_s, or use the adaptive dop853 integrator.');
         } else if (c.integrator === 'rk4' && c.dt > period / 20) {
           W.push('Time step ' + c.dt + ' s is coarse (>5% of orbital period ' + Math.round(period) + ' s for "' + s.name + '"). Recommend time_step_s <= ' + Math.round(period / 20) + ' s for high numerical fidelity.');
         }

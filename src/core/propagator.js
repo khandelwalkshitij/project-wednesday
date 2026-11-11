@@ -302,7 +302,7 @@ export function* simulate(rawConfig) {
   }
   // header (SIM_055, SIM_062, SIM_066, SIM_069)
   var rd = poleRaDec(P.poleAt(tt0)), H = [];
-  H.push('# plan.csv written by the orbital simulator');
+  H.push('# plan.csv written by Project Wednesday');
   H.push('# sim_version: ' + VERSION);
   H.push('# inertial_frame: ' + P.frame + '; centre: ' + P.centre);
   H.push('# body_fixed_frame: ' + P.bodyFrame);

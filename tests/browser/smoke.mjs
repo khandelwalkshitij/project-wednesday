@@ -37,7 +37,7 @@ async function suite(browser, url, tag) {
   for (const v of ['map', 'ltan', 'alt', 'beta', 'ecl', 'range', 'docs', 'globe']) {
     await page.click('[role=tab][data-v=' + v + ']'); await page.waitForTimeout(250); await page.screenshot({ path: OUT + '/' + tag + '-' + v + '.png' });
   }
-  check(tag + ': docs tab shows the documentation', /Project Wednesday Documentation/.test(await page.evaluate(() => { document.querySelector('[role=tab][data-v=docs]').click(); return document.getElementById('docs').innerText; })));
+  check(tag + ': docs tab shows the documentation pages', /Config reference[\s\S]*Accuracy and limits[\s\S]*Glossary/.test(await page.evaluate(() => { document.querySelector('[role=tab][data-v=docs]').click(); return document.getElementById('docs').innerText; })));
   await page.click('[role=tab][data-v=globe]');
   const exports = [];
   for (const v of ['ltan', 'alt', 'beta', 'ecl', 'range']) {
