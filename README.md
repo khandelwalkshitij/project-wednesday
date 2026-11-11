@@ -1,7 +1,8 @@
 # Project Wednesday
 
-**Live:** <https://khandelwalkshitij.github.io/project-wednesday/>  
-By Kshitij Khandelwal, [kshitijkhandelwal.com](https://kshitijkhandelwal.com).
+by [Kshitij Khandelwal](https://kshitijkhandelwal.com).
+
+**Live:** <https://khandelwalkshitij.github.io/project-wednesday/>
 
 ![Project Wednesday showing a 24-satellite Walker constellation on the 3D globe, with the setup form on the left](docs/images/screenshot.png)
 
